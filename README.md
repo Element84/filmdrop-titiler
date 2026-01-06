@@ -23,20 +23,12 @@ git clone https://github.com/Element84/filmdrop-titiler.git
 cd filmdrop-titiler
 
 # Install with development dependencies
-make install-dev
-
-# Or using pip directly
 pip install -e ".[dev,server]"
 ```
 
 ### For Production (Lambda)
 
-```bash
-# Create Lambda deployment package
-make package
-```
-
-This will create `dist/lambda-package.zip` that can be deployed to AWS Lambda.
+The Lambda deployment ZIP is automatically built and attached to GitHub releases. Download the `lambda-package.zip` from the [releases page](https://github.com/Element84/filmdrop-titiler/releases).
 
 ## Usage
 
@@ -45,8 +37,6 @@ This will create `dist/lambda-package.zip` that can be deployed to AWS Lambda.
 Start the development server:
 
 ```bash
-make run
-# Or directly:
 uvicorn filmdrop_titiler.main:app --reload --port 8000
 ```
 
@@ -133,32 +123,30 @@ filmdrop-titiler/
 │   ├── settings.py      # Configuration settings
 │   └── handler.py       # AWS Lambda handler
 ├── pyproject.toml       # Project metadata and dependencies
-├── Makefile            # Build and development commands
 └── README.md           # This file
-```
-
-### Available Make Commands
-
-```bash
-make help          # Show available commands
-make install       # Install for local development
-make install-dev   # Install with dev dependencies
-make clean         # Clean build artifacts
-make build         # Build the package
-make package       # Create Lambda ZIP package
-make test          # Run tests
-make run           # Run locally with uvicorn
 ```
 
 ### Testing
 
 ```bash
 # Install development dependencies
-make install-dev
+pip install -e ".[dev,server]"
 
 # Run tests
-make test
+pytest
 ```
+
+### Creating a Release
+
+When a new release is created on GitHub, the CI/CD workflow automatically:
+1. Builds the Lambda deployment package
+2. Attaches the `lambda-package.zip` to the release
+
+To create a release:
+1. Tag the commit: `git tag v0.1.0`
+2. Push the tag: `git push origin v0.1.0`
+3. Create a release on GitHub using the tag
+4. The workflow will build and attach the Lambda ZIP
 
 ## Differences from titiler-mosaicjson
 

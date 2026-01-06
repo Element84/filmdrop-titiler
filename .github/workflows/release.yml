@@ -1,0 +1,47 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build-lambda-package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build
+
+      - name: Build Lambda package
+        run: |
+          # Create package directory
+          mkdir -p lambda-package
+          
+          # Install the package and its dependencies
+          pip install -t lambda-package .
+          
+          # Copy the package source code
+          cp -r filmdrop_titiler lambda-package/
+          
+          # Create ZIP file
+          cd lambda-package
+          zip -r9 ../lambda-package.zip . -x "*.pyc" "*__pycache__*" "*.dist-info/RECORD" "*.dist-info/INSTALLER" "tests/*"
+
+      - name: Upload Lambda package to release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./lambda-package.zip
+          asset_name: lambda-package.zip
+          asset_content_type: application/zip
