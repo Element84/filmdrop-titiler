@@ -1,14 +1,18 @@
 # filmdrop-titiler
 
-A lightweight FastAPI implementation of [TiTiler](https://github.com/developmentseed/titiler) for AWS Lambda deployment in the Element84 Filmdrop ecosystem.
+A lightweight FastAPI implementation of
+[TiTiler](https://github.com/developmentseed/titiler) for AWS Lambda
+deployment in the Element84 Filmdrop ecosystem, generated with AI Assistance.
 
-This repository provides a simple Python package that generates an AWS Lambda ZIP distribution for deploying TiTiler as a serverless dynamic tile server. It uses a specific versioned release of TiTiler and is designed to be deployed via Terraform modules.
+This repository provides a simple Python package that generates an AWS Lambda ZIP
+distribution for deploying TiTiler as a serverless dynamic tile server.
+It uses a specific versioned release of TiTiler and is designed to be
+ deployed via Terraform modules.
 
 ## Features
 
 - **FastAPI-based**: Built on TiTiler's FastAPI framework for high performance
 - **AWS Lambda Ready**: Optimized for serverless deployment with Mangum adapter
-- **Lightweight**: Stripped-down implementation without Kubernetes or Azure components
 - **Cloud Optimized GeoTIFF (COG) Support**: Serve tiles from COG files
 - **STAC Support**: Work with SpatioTemporal Asset Catalog items
 - **Versioned TiTiler**: Uses specific TiTiler version for reproducible deployments
@@ -28,23 +32,27 @@ pip install -e ".[dev,server]"
 
 ### For Production (Lambda)
 
-The Lambda deployment ZIP is automatically built and attached to GitHub releases. Download the `lambda-package.zip` from the [releases page](https://github.com/Element84/filmdrop-titiler/releases).
+The Lambda deployment ZIP is automatically built and attached to GitHub
+releases. The `release.yml` workflow packages the app into a lambda
+dist that can be downloaded as `lambda-package.zip` from
+the [releases page](https://github.com/Element84/filmdrop-titiler/releases).
 
 ## Usage
 
 ### Running Locally
 
-Start the development server:
+Navigate your shell to the `src` directory and start the development server:
 
 ```bash
 uvicorn filmdrop_titiler.main:app --reload --port 8000
 ```
 
-The API will be available at http://localhost:8000
+The API will be available at [http://localhost:8000](http://localhost:8000)
 
 Interactive API documentation is available at:
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
+
+- Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs)
+- ReDoc: [http://localhost:8000/redoc](http://localhost:8000/redoc)
 
 ### API Endpoints
 
@@ -59,11 +67,13 @@ The following endpoints are available:
 ### Example Requests
 
 **Get COG info:**
+
 ```bash
 curl "http://localhost:8000/cog/info?url=https://example.com/image.tif"
 ```
 
 **Get a tile:**
+
 ```bash
 curl "http://localhost:8000/cog/tiles/14/3241/6253?url=https://example.com/image.tif"
 ```
@@ -72,12 +82,13 @@ curl "http://localhost:8000/cog/tiles/14/3241/6253?url=https://example.com/image
 
 ### AWS Lambda
 
-The package is designed to be deployed as an AWS Lambda function. The `dist/lambda-package.zip` file created by `make package` contains everything needed.
+The package is designed to be deployed as an AWS Lambda function. The
+`dist/lambda-package.zip` file created by releases contains everything needed.
 
 #### Lambda Configuration
 
 - **Handler**: `filmdrop_titiler.handler.handler`
-- **Runtime**: Python 3.9 or higher
+- **Runtime**: Python 3.13 or higher
 - **Memory**: 1024 MB (minimum recommended)
 - **Timeout**: 30 seconds (adjust based on your needs)
 
@@ -91,7 +102,8 @@ The package is designed to be deployed as an AWS Lambda function. The `dist/lamb
 
 ### Terraform Integration
 
-This package is intended to be deployed via Terraform modules. The ZIP distribution can be referenced in your Terraform configuration:
+This package is intended to be deployed via Terraform modules. The
+ZIP distribution can be referenced in your Terraform configuration:
 
 ```hcl
 resource "aws_lambda_function" "titiler" {
@@ -115,7 +127,7 @@ resource "aws_lambda_function" "titiler" {
 
 ### Project Structure
 
-```
+```text
 filmdrop-titiler/
 ├── filmdrop_titiler/
 │   ├── __init__.py      # Package version
@@ -139,10 +151,12 @@ pytest
 ### Creating a Release
 
 When a new release is created on GitHub, the CI/CD workflow automatically:
+
 1. Builds the Lambda deployment package
 2. Attaches the `lambda-package.zip` to the release
 
 To create a release:
+
 1. Tag the commit: `git tag v0.1.0`
 2. Push the tag: `git push origin v0.1.0`
 3. Create a release on GitHub using the tag
@@ -150,7 +164,9 @@ To create a release:
 
 ## Differences from titiler-mosaicjson
 
-This project is similar to [Element84/titiler-mosaicjson](https://github.com/Element84/titiler-mosaicjson) but with key differences:
+This project is similar to
+[Element84/titiler-mosaicjson](https://github.com/Element84/titiler-mosaicjson)
+ but with key differences:
 
 - **Simpler**: No mosaic/DynamoDB functionality
 - **Lightweight**: No Kubernetes or Azure deployment options
@@ -166,3 +182,5 @@ Apache-2.0
 Maintained by [Element 84](http://element84.com)
 
 Based on [TiTiler](https://github.com/developmentseed/titiler) by [Development Seed](http://developmentseed.org)
+
+Readme generated with AI Assistance

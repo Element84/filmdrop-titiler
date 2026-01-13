@@ -5,11 +5,19 @@ import logging
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 from starlette_cramjam.middleware import CompressionMiddleware
+from rio_tiler.io import STACReader
+from cogeo_mosaic.backends import FileBackend
 
 from filmdrop_titiler import __version__
 from filmdrop_titiler.settings import ApiSettings
 from titiler.core.errors import DEFAULT_STATUS_CODES, add_exception_handlers
-from titiler.core.factory import AlgorithmFactory, MultiBaseTilerFactory, TilerFactory, TMSFactory
+from titiler.core.factory import (
+    AlgorithmFactory,
+    MultiBaseTilerFactory,
+    TilerFactory,
+    TMSFactory,
+)
+from titiler.mosaic.factory import MosaicTilerFactory
 from titiler.core.middleware import (
     CacheControlMiddleware,
     LoggerMiddleware,
@@ -55,8 +63,11 @@ add_exception_handlers(app, DEFAULT_STATUS_CODES)
 cog = TilerFactory(router_prefix="/cog")
 app.include_router(cog.router, prefix="/cog", tags=["Cloud Optimized GeoTIFF"])
 
-stac = MultiBaseTilerFactory(router_prefix="/stac")
+stac = MultiBaseTilerFactory(reader=STACReader, router_prefix="/stac")
 app.include_router(stac.router, prefix="/stac", tags=["SpatioTemporal Asset Catalog"])
+
+mosaic = MosaicTilerFactory(backend=FileBackend, router_prefix="/mosaicjson")
+app.include_router(mosaic.router, prefix="/mosaicjson", tags=["MosaicJSON"])
 
 algorithms = AlgorithmFactory()
 app.include_router(algorithms.router, tags=["Algorithms"])

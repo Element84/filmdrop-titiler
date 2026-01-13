@@ -1,5 +1,3 @@
-"""AWS Lambda handler."""
-
 import logging
 
 from mangum import Mangum

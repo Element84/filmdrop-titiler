@@ -27,13 +27,13 @@ jobs:
         run: |
           # Create package directory
           mkdir -p lambda-package
-          
+
           # Install the package and its dependencies
           pip install -t lambda-package .
-          
+
           # Copy the package source code
           cp -r filmdrop_titiler lambda-package/
-          
+
           # Create ZIP file
           cd lambda-package
           zip -r9 ../lambda-package.zip . -x "*.pyc" "*__pycache__*" "*.dist-info/RECORD" "*.dist-info/INSTALLER" "tests/*"
