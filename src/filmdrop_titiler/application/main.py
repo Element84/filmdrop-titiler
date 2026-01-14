@@ -8,8 +8,8 @@ from starlette_cramjam.middleware import CompressionMiddleware
 from rio_tiler.io import STACReader
 from cogeo_mosaic.backends import FileBackend
 
-from filmdrop_titiler import __version__
-from filmdrop_titiler.settings import ApiSettings
+from filmdrop_titiler.application import __version__
+from filmdrop_titiler.application.settings import ApiSettings
 from titiler.core.errors import DEFAULT_STATUS_CODES, add_exception_handlers
 from titiler.core.factory import (
     AlgorithmFactory,
@@ -41,9 +41,9 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=api_settings.cors_origins.split(","),
+    allow_origins=api_settings.cors_origins,
     allow_credentials=True,
-    allow_methods=api_settings.cors_allow_methods.split(","),
+    allow_methods=api_settings.cors_allow_methods,
     allow_headers=["*"],
 )
 

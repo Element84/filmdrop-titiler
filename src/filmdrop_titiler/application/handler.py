@@ -2,7 +2,7 @@ import logging
 
 from mangum import Mangum
 
-from filmdrop_titiler.main import app
+from filmdrop_titiler.application.main import app
 
 logging.getLogger("mangum.lifespan").setLevel(logging.ERROR)
 logging.getLogger("mangum.http").setLevel(logging.ERROR)

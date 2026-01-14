@@ -26,9 +26,9 @@ classifiers = [
 ]
 dynamic = ["version"]
 dependencies = [
-    "titiler.core==1.1.0",
-    "titiler.extensions==1.1.0",
-    "titiler.mosaic==1.1.0",
+    "titiler.core[telemetry]==1.1.0",
+    "titiler.extensions[cogeo,stac]==1.1.0",
+    "titiler.mosaic[mosaicjson]==1.1.0",
     "mangum>=0.17.0",
     "pydantic>=2.0",
     "pydantic-settings>=2.0",
