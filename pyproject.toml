@@ -70,5 +70,5 @@ addopts = "-v --cov=filmdrop_titiler --cov-report=term-missing"
 testpaths = ["tests"]
 
 [[tool.mypy.overrides]]
-module=["starlette_cramjam", "starlette_cramjam.middleware"]
+module=["starlette_cramjam", "starlette_cramjam.middleware", "rasterio"]
 ignore_missing_imports = true
