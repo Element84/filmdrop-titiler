@@ -26,8 +26,6 @@ from filmdrop_titiler.application.settings import ApiSettings
 from titiler.core.errors import DEFAULT_STATUS_CODES, add_exception_handlers
 from titiler.core.utils import accept_media_type, create_html_response, update_openapi
 from titiler.core.factory import (
-    AlgorithmFactory,
-    ColorMapFactory,
     MultiBaseTilerFactory,
     TilerFactory,
     TMSFactory,
@@ -159,20 +157,6 @@ if not api_settings.disable_mosaic:
     app.include_router(mosaic.router, prefix="/mosaicjson", tags=["MosaicJSON"])
     TITILER_CONFORMS_TO.update(mosaic.conforms_to)
 
-# Algorithm endpoints
-algorithms = AlgorithmFactory(templates=titiler_templates)
-app.include_router(algorithms.router, tags=["Algorithms"])
-TITILER_CONFORMS_TO.update(algorithms.conforms_to)
-
-
-# Colormaps endpoints
-cmaps = ColorMapFactory(templates=titiler_templates)
-app.include_router(
-    cmaps.router,
-    tags=["ColorMaps"],
-)
-TITILER_CONFORMS_TO.update(cmaps.conforms_to)
-
 # TileMatrixSets endpoints
 tms = TMSFactory(templates=titiler_templates)
 app.include_router(tms.router, tags=["Tiling Schemes"])
@@ -210,8 +194,8 @@ app.add_middleware(
         "image/jp2",
         "image/webp",
     },
-    compression_level=6,
 )
+
 
 app.add_middleware(
     CacheControlMiddleware,

@@ -47,7 +47,7 @@ class ApiSettings(BaseSettings):
 
     template_directory: str | None = None
 
-    disable_cog: bool = False
+    disable_cog: bool = True
     disable_stac: bool = False
     disable_mosaic: bool = False
 
