@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build-lambda-package:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Required to upload release assets
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Build Lambda package
+        run: |
+          # Create package directory
+          mkdir -p lambda-package
+
+          # Install the package and its dependencies
+          uv pip install --target lambda-package .
+
+          # Remove any unnecessary files
+          cd lambda-package
+          find . -type d -name "__pycache__" -exec rm -rf {} +
+          find . -name "*.pyc" -delete
+          find . -name "tests" -type d -exec rm -rf {} +
+
+          # Create ZIP file
+          zip -r9 ../lambda-package.zip . -x "*.dist-info/RECORD" "*.dist-info/INSTALLER"
+
+      - name: Upload Lambda package to release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./lambda-package.zip
+          asset_name: lambda-package.zip
+          asset_content_type: application/zip

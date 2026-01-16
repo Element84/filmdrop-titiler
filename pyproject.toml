@@ -1,0 +1,77 @@
+[project]
+name = "filmdrop-titiler"
+description = "A lightweight FastAPI implementation of TiTiler for AWS Lambda deployment in the Filmdrop Ecosystem"
+readme = "README.md"
+requires-python = ">=3.13"
+license = {text = "Apache-2.0"}
+authors = [
+    {name = "Element 84", email = "info@element84.com"},
+    {name = "Theo Reuter", email = "treuter@element84.com"}
+]
+keywords = [
+    "STAC",
+    "FastAPI",
+    "Dynamic tile server",
+    "GDAL",
+    "Rasterio",
+    "AWS Lambda",
+]
+classifiers = [
+    "Intended Audience :: Information Technology",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: GIS",
+]
+dynamic = ["version"]
+dependencies = [
+    "titiler.core[telemetry]==1.1.0",
+    "titiler.extensions[cogeo,stac]==1.1.0",
+    "titiler.mosaic[mosaicjson]==1.1.0",
+    "mangum>=0.17.0",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "starlette-cramjam>=0.3,<0.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "pytest-asyncio",
+    "httpx",
+    "pre-commit",
+    "pre-commit-hooks",
+    "ruff",
+    "mypy",
+]
+server = [
+    "uvicorn[standard]>=0.12.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/Element84/filmdrop-titiler"
+Documentation = "https://github.com/Element84/filmdrop-titiler"
+Repository = "https://github.com/Element84/filmdrop-titiler"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.dynamic]
+version = {attr = "filmdrop_titiler.application.__version__"}
+
+[tool.setuptools.packages.find]
+include = ["filmdrop_titiler*"]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-v --cov=filmdrop_titiler --cov-report=term-missing"
+testpaths = ["tests"]
+
+[[tool.mypy.overrides]]
+module=["starlette_cramjam", "starlette_cramjam.middleware", "rasterio"]
+ignore_missing_imports = true
