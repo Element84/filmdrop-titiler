@@ -4,14 +4,14 @@ repos:
       - id: ruff_check
         name: ruff check
         entry: ruff check --force-exclude
-        language: python
+        language: system
         'types_or': [python, pyi]
         args: [--fix, --exit-non-zero-on-fix]
         require_serial: true
       - id: ruff_format
         name: ruff format
         entry: ruff format --force-exclude
-        language: python
+        language: system
         'types_or': [python, pyi]
         args: []
         require_serial: true
@@ -45,7 +45,7 @@ repos:
       - id: mypy
         name: mypy
         entry: mypy
-        language: python
+        language: system
         'types_or': [python, pyi]
         args: []
         require_serial: true

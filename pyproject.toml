@@ -41,7 +41,9 @@ dev = [
     "pytest-asyncio",
     "httpx",
     "pre-commit",
-    "pre-commit-hooks"
+    "pre-commit-hooks",
+    "ruff",
+    "mypy",
 ]
 server = [
     "uvicorn[standard]>=0.12.0",
