@@ -1,13 +1,9 @@
 """FastAPI application for TiTiler."""
 
-import json
 from typing import Annotated, Literal
-from logging import config as log_config
 from starlette.requests import Request
 import rasterio
-from starlette.templating import Jinja2Templates
 from rio_tiler.io import Reader
-import logging
 from titiler.core.resources.enums import MediaType
 
 from fastapi import FastAPI, Query
@@ -15,7 +11,6 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette_cramjam.middleware import CompressionMiddleware
 from rio_tiler.io import STACReader
 from cogeo_mosaic.backends import MosaicBackend as MosaicJSONBackend
-import jinja2
 from starlette import status
 
 from titiler.mosaic.errors import MOSAIC_STATUS_CODES
@@ -28,14 +23,11 @@ from titiler.core.utils import accept_media_type, create_html_response, update_o
 from titiler.core.factory import (
     MultiBaseTilerFactory,
     TilerFactory,
-    TMSFactory,
 )
 from titiler.mosaic.factory import MosaicTilerFactory
 from titiler.core.middleware import (
     CacheControlMiddleware,
-    LoggerMiddleware,
     LowerCaseQueryStringMiddleware,
-    TotalTimeMiddleware,
 )
 from titiler.mosaic.extensions.mosaicjson import MosaicJSONExtension
 from titiler.mosaic.extensions.wmts import wmtsExtension as mosaic_wmtsExtension
@@ -48,34 +40,9 @@ from titiler.extensions import (
     wmtsExtension,
 )
 from titiler.core.models.OGC import Conformance, Landing
-
-logging.getLogger("botocore.credentials").disabled = True
-logging.getLogger("botocore.utils").disabled = True
-logging.getLogger("rasterio.session").setLevel(logging.ERROR)
-logging.getLogger("rio-tiler").setLevel(logging.ERROR)
+from filmdrop_titiler.application.templates.template import titiler_templates
 
 api_settings = ApiSettings()
-
-
-# custom template directory
-templates_location: list[jinja2.BaseLoader] = (
-    [jinja2.FileSystemLoader(api_settings.template_directory)]
-    if api_settings.template_directory
-    else []
-)
-# default template directory
-templates_location.extend(
-    [
-        jinja2.PackageLoader("filmdrop_titiler.application", "templates"),
-        jinja2.PackageLoader("titiler.core", "templates"),
-    ]
-)
-
-jinja2_env = jinja2.Environment(
-    autoescape=jinja2.select_autoescape(["html"]),
-    loader=jinja2.ChoiceLoader(templates_location),
-)
-titiler_templates = Jinja2Templates(env=jinja2_env)
 
 
 ## Create app
@@ -157,11 +124,6 @@ if not api_settings.disable_mosaic:
     app.include_router(mosaic.router, prefix="/mosaicjson", tags=["MosaicJSON"])
     TITILER_CONFORMS_TO.update(mosaic.conforms_to)
 
-# TileMatrixSets endpoints
-tms = TMSFactory(templates=titiler_templates)
-app.include_router(tms.router, tags=["Tiling Schemes"])
-TITILER_CONFORMS_TO.update(tms.conforms_to)
-
 add_exception_handlers(app, DEFAULT_STATUS_CODES)
 
 # Add Mosaic specific error handlers
@@ -202,71 +164,6 @@ app.add_middleware(
     cachecontrol=api_settings.cachecontrol,
     exclude_path={r"/healthz"},
 )
-
-if api_settings.debug:
-    app.add_middleware(LoggerMiddleware)
-    app.add_middleware(TotalTimeMiddleware)
-
-    log_config.dictConfig(
-        {
-            "version": 1,
-            "disable_existing_loggers": False,
-            "formatters": {
-                "detailed": {
-                    "format": "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
-                },
-                "request": {
-                    "format": (
-                        "%(asctime)s - %(levelname)s - %(name)s - %(message)s "
-                        + json.dumps(
-                            {
-                                k: f"%({k})s"
-                                for k in [
-                                    "http.method",
-                                    "http.referer",
-                                    "http.request.header.origin",
-                                    "http.route",
-                                    "http.target",
-                                    "http.request.header.content-length",
-                                    "http.request.header.accept-encoding",
-                                    "http.request.header.origin",
-                                    "titiler.path_params",
-                                    "titiler.query_params",
-                                ]
-                            }
-                        )
-                    ),
-                },
-            },
-            "handlers": {
-                "console_detailed": {
-                    "class": "logging.StreamHandler",
-                    "level": "WARNING",
-                    "formatter": "detailed",
-                    "stream": "ext://sys.stdout",
-                },
-                "console_request": {
-                    "class": "logging.StreamHandler",
-                    "level": "DEBUG",
-                    "formatter": "request",
-                    "stream": "ext://sys.stdout",
-                },
-            },
-            "loggers": {
-                "titiler": {
-                    "level": "INFO",
-                    "handlers": ["console_detailed"],
-                    "propagate": False,
-                },
-                "titiler.requests": {
-                    "level": "INFO",
-                    "handlers": ["console_request"],
-                    "propagate": False,
-                },
-            },
-        }
-    )
-
 
 if api_settings.lower_case_query_parameters:
     app.add_middleware(LowerCaseQueryStringMiddleware)
@@ -450,9 +347,3 @@ def conformance(
         )
 
     return data
-
-
-@app.get("/healthz", description="Health Check", tags=["Health Check"])
-def healthz():
-    """Health check endpoint."""
-    return {"status": "ok"}
