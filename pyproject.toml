@@ -1,6 +1,6 @@
 [project]
 name = "filmdrop-titiler"
-description = "A lightweight FastAPI implementation of TiTiler for AWS Lambda deployment"
+description = "A lightweight FastAPI implementation of TiTiler for AWS Lambda deployment in the Filmdrop Ecosystem"
 readme = "README.md"
 requires-python = ">=3.13"
 license = {text = "Apache-2.0"}
@@ -9,7 +9,6 @@ authors = [
     {name = "Theo Reuter", email = "treuter@element84.com"}
 ]
 keywords = [
-    "COG",
     "STAC",
     "FastAPI",
     "Dynamic tile server",

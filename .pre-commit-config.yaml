@@ -53,3 +53,4 @@ repos:
     rev: v0.42.0
     hooks:
     - id: markdownlint
+      exclude: ^\.github/pull_request_template\.md$
