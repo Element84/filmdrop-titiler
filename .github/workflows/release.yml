@@ -4,9 +4,12 @@ on:
   release:
     types: [published]
 
+
 jobs:
   build-lambda-package:
     runs-on: ubuntu-latest
+    env:
+      PACKAGE_NAME: titiler-lambda-3.13
     permissions:
       contents: write  # Required to upload release assets
     steps:
@@ -37,7 +40,7 @@ jobs:
           find . -name "tests" -type d -exec rm -rf {} +
 
           # Create ZIP file
-          zip -r9 ../titiler-lambda-3.13.zip . -x "*.dist-info/RECORD" "*.dist-info/INSTALLER"
+          zip -r9 ../$PACKAGE_NAME . -x "*.dist-info/RECORD" "*.dist-info/INSTALLER"
 
       - name: Upload Lambda package to release
         uses: actions/upload-release-asset@v1
@@ -45,6 +48,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./lambda-package.zip
-          asset_name: lambda-package.zip
+          asset_path: ./${{env.PACKAGE_NAME}}
+          asset_name: ${{env.PACKAGE_NAME}}
           asset_content_type: application/zip
