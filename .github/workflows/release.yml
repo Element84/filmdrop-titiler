@@ -9,7 +9,7 @@ jobs:
   build-lambda-package:
     runs-on: ubuntu-latest
     env:
-      PACKAGE_NAME: titiler-lambda-3.13.zip
+      PACKAGE_NAME: titiler-lambda-python3.13.zip
     permissions:
       contents: write  # Required to upload release assets
     steps:
