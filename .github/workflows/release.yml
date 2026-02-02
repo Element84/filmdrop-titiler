@@ -3,7 +3,7 @@ name: Release
 on:
   release:
     types: [published]
-
+  workflow_dispatch:
 
 jobs:
   build-lambda-package:
@@ -11,35 +11,28 @@ jobs:
     env:
       PACKAGE_NAME: titiler-lambda-python3.13.zip
     permissions:
-      contents: write  # Required to upload release assets
+      contents: write 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Build Lambda package
+      # run in docker container to compile in format compatible with lambda
+      - name: Build Lambda package in Docker
         run: |
-          # Create package directory
-          mkdir -p lambda-package
-
-          # Install the package and its dependencies
-          uv pip install --target lambda-package .
-
-          # Remove any unnecessary files
-          cd lambda-package
-          find . -type d -name "__pycache__" -exec rm -rf {} +
-          find . -name "*.pyc" -delete
-          find . -name "tests" -type d -exec rm -rf {} +
-
-          # Create ZIP file
-          zip -r9 ../$PACKAGE_NAME . -x "*.dist-info/RECORD" "*.dist-info/INSTALLER"
+          docker run --rm \
+            -v ${{ github.workspace }}:/workspace \
+            -w /workspace \
+            public.ecr.aws/lambda/python:3.13 \
+            bash -c "
+              pip install uv &&
+              mkdir -p lambda-package &&
+              uv pip install --python-platform manylinux_2_28_x86_64 --target lambda-package . &&
+              cd lambda-package &&
+              find . -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true &&
+              find . -name '*.pyc' -delete &&
+              find . -type d -name 'tests' -exec rm -rf {} + 2>/dev/null || true &&
+              zip -r9 ../\$PACKAGE_NAME . -x '*.dist-info/RECORD' '*.dist-info/INSTALLER'
+            "
 
       - name: Upload Lambda package to release
         uses: actions/upload-release-asset@v1
@@ -47,6 +40,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./${{env.PACKAGE_NAME}}
-          asset_name: ${{env.PACKAGE_NAME}}
+          asset_path: ./${{ env.PACKAGE_NAME }}
+          asset_name: ${{ env.PACKAGE_NAME }}
           asset_content_type: application/zip
