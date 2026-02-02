@@ -19,21 +19,12 @@ jobs:
       - name: Build Lambda package in Docker
         run: |
           docker run --rm \
-            -v ${{ github.workspace }}:/workspace \
+            --entrypoint /bin/bash \
+            -v "${{ github.workspace }}":/workspace \
             -w /workspace \
-            -e PACKAGE_NAME=${{ env.PACKAGE_NAME }} \
+            -e PACKAGE_NAME="${{ env.PACKAGE_NAME }}" \
             public.ecr.aws/lambda/python:3.13 \
-            /bin/bash -c '
-              set -e
-              pip install uv
-              mkdir -p lambda-package
-              uv pip install --python-platform manylinux_2_28_x86_64 --target lambda-package .
-              cd lambda-package
-              find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-              find . -name "*.pyc" -delete
-              find . -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true
-              zip -r9 ../$PACKAGE_NAME . -x "*.dist-info/RECORD" "*.dist-info/INSTALLER"
-            '
+            -c 'dnf install -y zip && pip install uv && uv pip install --python-platform x86_64-manylinux_2_28 --target lambda-package . && cd lambda-package && zip -r9 ../$PACKAGE_NAME .'
 
       - name: Upload Lambda package as artifact
         uses: actions/upload-artifact@v4
