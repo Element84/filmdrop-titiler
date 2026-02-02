@@ -31,7 +31,6 @@ jobs:
 
           # Install the package and its dependencies
           uv pip install --target lambda-package .
-          cp -r src/filmdrop_titiler lambda-package/
 
           # Remove any unnecessary files
           cd lambda-package
