@@ -5,7 +5,7 @@ set -e
 # This script runs inside the AWS Lambda Python Docker container
 
 echo "Installing system dependencies..."
-dnf install -y zip binutils
+dnf install -y zip binutils findutils
 
 echo "Installing Python dependencies..."
 pip install --no-cache-dir --target lambda-package .
