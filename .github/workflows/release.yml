@@ -24,7 +24,7 @@ jobs:
             -w /workspace \
             -e PACKAGE_NAME="${{ env.PACKAGE_NAME }}" \
             public.ecr.aws/lambda/python:3.13 \
-            -c 'dnf install -y zip && pip install uv && uv pip install --python-platform x86_64-manylinux_2_28 --target lambda-package . && cd lambda-package && zip -r9 ../$PACKAGE_NAME .'
+            -c 'dnf install -y zip && pip install uv && uv pip install --python-platform x86_64-manylinux_2_28 --target lambda-package . && cp -r src/filmdrop_titiler lambda-package/ && cd lambda-package && zip -r9 ../$PACKAGE_NAME .'
 
       - name: Upload Lambda package as artifact
         uses: actions/upload-artifact@v4
