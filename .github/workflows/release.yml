@@ -24,7 +24,7 @@ jobs:
             -v "${{ github.workspace }}":/workspace \
             -w /workspace \
             -e PACKAGE_NAME="${{ env.PACKAGE_NAME }}" \
-            public.ecr.aws/lambda/python:3.13 \
+            public.ecr.aws/sam/build-python3.13:1.153.1-20260128194423 \
             build-lambda.sh
 
       - name: Upload Lambda package as artifact

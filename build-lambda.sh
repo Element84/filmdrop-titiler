@@ -2,21 +2,16 @@
 set -e
 
 # Build Lambda deployment package for filmdrop-titiler
-# This script runs inside the AWS Lambda Python Docker container
+# This script runs inside the AWS SAM build container
 
 echo "Installing system dependencies..."
-dnf install -y zip binutils findutils expat
+dnf install -y zip binutils findutils
 
 echo "Installing Python dependencies..."
 pip install --no-cache-dir --target lambda-package .
 
 echo "Copying application source code..."
 cp -r src/filmdrop_titiler lambda-package/
-
-echo "Copying required system libraries..."
-# Copy expat and other GDAL dependencies that Lambda runtime doesn't include
-mkdir -p lambda-package/lib
-cp -P /usr/lib64/libexpat.so* lambda-package/lib/ 2>/dev/null || true
 
 echo "Cleaning up to reduce package size..."
 cd lambda-package
