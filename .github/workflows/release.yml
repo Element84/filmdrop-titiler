@@ -19,6 +19,7 @@ jobs:
       - name: Build Lambda package in Docker
         run: |
           docker run --rm \
+            --platform linux/amd64 \
             --entrypoint /bin/bash \
             -v "${{ github.workspace }}":/workspace \
             -w /workspace \
