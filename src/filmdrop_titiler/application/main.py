@@ -40,6 +40,7 @@ from titiler.extensions import (
     wmtsExtension,
 )
 from titiler.core.models.OGC import Conformance, Landing
+from filmdrop_titiler.application.extensions import mosaicExtension
 from filmdrop_titiler.application.templates.template import titiler_templates
 
 api_settings = ApiSettings()
@@ -84,6 +85,7 @@ if not api_settings.disable_cog:
         extensions=[
             cogValidateExtension(),
             cogViewerExtension(),
+            MosaicJSONExtension(),
             stacExtension(),
             wmtsExtension(),
         ],
@@ -117,6 +119,7 @@ if not api_settings.disable_mosaic:
         extensions=[
             MosaicJSONExtension(),
             mosaic_wmtsExtension(),
+            mosaicExtension(),
         ],
         enable_telemetry=api_settings.telemetry_enabled,
         templates=titiler_templates,

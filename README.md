@@ -168,7 +168,6 @@ This project is similar to
 [Element84/titiler-mosaicjson](https://github.com/Element84/titiler-mosaicjson)
  but with key differences:
 
-- **Simpler**: No mosaic/DynamoDB functionality
 - **Lightweight**: No Kubernetes or Azure deployment options
 - **Lambda-focused**: Optimized specifically for AWS Lambda deployment
 - **Minimal**: Only core TiTiler functionality

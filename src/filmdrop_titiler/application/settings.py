@@ -55,6 +55,10 @@ class ApiSettings(BaseSettings):
 
     telemetry_enabled: bool = False
 
+    mosaic_backend: str = "file://"
+    mosaic_host: str = "/tmp"
+    mosaic_format: str = ".json.gz"
+
     # an API key required to access any endpoint, passed via the ?access_token= query parameter
     global_access_token: str | None = None
 
