@@ -7,25 +7,8 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, validator
 
 from stac_pydantic.api.search import ExtendedSearch
+from stac_pydantic.links import Link
 from stac_pydantic.utils import AutoValueEnum
-
-
-def to_camel(snake_str: str) -> str:
-    """
-    Converts snake_case_string to camelCaseString
-    """
-    first, *others = snake_str.split("_")
-    return "".join([first.lower(), *map(str.title, others)])
-
-
-# Link and Links derived from models in https://github.com/stac-utils/stac-pydantic
-class Link(BaseModel):
-    """Link Relation"""
-
-    href: str
-    rel: str
-    type: Optional[str]
-    title: Optional[str]
 
 
 class MosaicEntity(BaseModel):
@@ -40,23 +23,6 @@ rfc3339_regex_str = (
     r"(\d\d):(\d\d):(\d\d)(\.\d+)?(Z|([-+])(\d\d):(\d\d))$"
 )
 rfc3339_regex = re.compile(rfc3339_regex_str)
-
-
-# copied from stac_pydantic, because the neq, lte, and gte were wrong (ne, le, and ge)
-class Operator(str, AutoValueEnum):
-    """
-    https://github.com/radiantearth/stac-api-spec/tree/master/extensions/query#query-api-extension
-    """
-
-    eq = auto()
-    neq = auto()
-    lt = auto()
-    lte = auto()
-    gt = auto()
-    gte = auto()
-    startsWith = auto()
-    endsWith = auto()
-    contains = auto()
 
 
 class StacApiQueryRequestBody(ExtendedSearch):
@@ -74,8 +40,7 @@ class StacApiQueryRequestBody(ExtendedSearch):
 
     max_items: Optional[int] = None
 
-    # overriding query to use our Operator class rather than the broken stac_pydantic one
-    query: Optional[Dict[str, Dict[Operator, Any]]] = None
+    filter: dict[str, Any] | None = None
 
     @validator("datetime")
     def validate_datetime(cls, v):

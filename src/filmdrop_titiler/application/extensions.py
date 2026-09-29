@@ -307,6 +307,7 @@ class mosaicExtension(FactoryExtension):
                     bbox=mosaic_request.bbox,
                     intersects=mosaic_request.intersects,
                     query=mosaic_request.query,
+                    filter=mosaic_request.filter,
                     max_items=mosaic_request.max_items
                     if mosaic_request.max_items and mosaic_request.max_items < self.default_max_items
                     else self.default_max_items,
