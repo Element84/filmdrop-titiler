@@ -216,7 +216,7 @@ class mosaicExtension(FactoryExtension):
                 mosaicjson.name = req.name
                 mosaicjson.description = req.description
                 mosaicjson.attribution = req.attribution
-                mosaicjson.version = req if req.version else "0.0.1"
+                mosaicjson.version = req.version if req.version else "0.0.1"
 
                 return mosaicjson
 
@@ -272,11 +272,11 @@ class mosaicExtension(FactoryExtension):
 
         async def populate_mosaicjson(request, content_type):
             body_json = await request.json()
-            if (
-                not content_type
-                or content_type == "application/json"
-                or content_type == "application/json; charset=utf-8"
-                or content_type == "application/vnd.titiler.mosaicjson+json"
+            content_type = (content_type or "").split(";", 1)[0].strip().lower()
+            if content_type in (
+                "",
+                "application/json",
+                "application/vnd.titiler.mosaicjson+json",
             ):
                 mosaicjson = MosaicJSON(**body_json)
             elif content_type == "application/vnd.titiler.urls+json":
@@ -344,7 +344,6 @@ class mosaicExtension(FactoryExtension):
             dataset_params,
             render_params,
             colormap,
-            pixel_selection: PixelSelectionMethod,
             reader_params,
         ) -> tuple[bytes, Any, ImageType, list[tuple[str, float]]]:
             """Create map tile from a COG."""
@@ -366,8 +365,6 @@ class mosaicExtension(FactoryExtension):
                         x,
                         y,
                         z,
-                        # Pixel selection no longer appears to be a valid positional arg for this tile
-                        # pixel_selection,
                         threads=threads,
                         tilesize=tilesize,
                         **layer_params,
@@ -382,8 +379,8 @@ class mosaicExtension(FactoryExtension):
                 image = data.post_process()
             timings.append(("postprocess", round(t.elapsed * 1000, 2)))
 
-            if hasattr(render_params, "rescale"):
-                image.rescale(render_params.rescale)
+            if "rescale" in render_params:
+                image.rescale(render_params['rescale'])
 
             with Timer() as t:
                 content = image.render(
@@ -509,7 +506,7 @@ class mosaicExtension(FactoryExtension):
             with rasterio.Env(**env):
                 if mosaicjson := await retrieve(mosaic_id, reader_params.as_dict()):
                     center = list(mosaicjson.center)
-                    if minzoom:
+                    if minzoom is not None:
                         center[-1] = minzoom
                     return TileJSON(
                         bounds=mosaicjson.bounds,
@@ -601,12 +598,6 @@ class mosaicExtension(FactoryExtension):
             dataset_params=Depends(factory.dataset_dependency),
             render_params=Depends(factory.render_dependency),
             colormap=Depends(factory.colormap_dependency),
-            pixel_selection=Depends(factory.pixel_selection_dependency),
-            # PixelSelectionMethod = Query(
-                # PixelSelectionMethod.first,
-                # description="Pixel selection method.",
-                # include_in_schema=False,
-            # ),
             env=Depends(factory.environment_dependency),
             reader_params=Depends(factory.reader_dependency),
         ):
@@ -628,7 +619,6 @@ class mosaicExtension(FactoryExtension):
                             dataset_params.as_dict(),
                             render_params.as_dict(),
                             colormap,
-                            pixel_selection,
                             reader_params.as_dict(),
                         ),
                         int(os.getenv("MOSAIC_TILE_TIMEOUT", 30)),
@@ -775,6 +765,6 @@ class mosaicExtension(FactoryExtension):
             mosaicjson.name = urisrb.name
             mosaicjson.description = urisrb.description
             mosaicjson.attribution = urisrb.attribution
-            mosaicjson.version = urisrb if urisrb.version else "0.0.1"
+            mosaicjson.version = urisrb.version if urisrb.version else "0.0.1"
 
             return mosaicjson

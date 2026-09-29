@@ -170,7 +170,6 @@ This project is similar to
 
 - **Lightweight**: No Kubernetes or Azure deployment options
 - **Lambda-focused**: Optimized specifically for AWS Lambda deployment
-- **Minimal**: Only core TiTiler functionality
 
 ## License
 
