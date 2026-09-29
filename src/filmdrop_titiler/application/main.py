@@ -85,7 +85,6 @@ if not api_settings.disable_cog:
         extensions=[
             cogValidateExtension(),
             cogViewerExtension(),
-            MosaicJSONExtension(),
             stacExtension(),
             wmtsExtension(),
         ],

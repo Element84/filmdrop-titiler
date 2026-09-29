@@ -100,14 +100,6 @@ class StacApiQueryRequestBody(ExtendedSearch):
                 )
             dates.append(value)
 
-        # this should get validated by the server anyway
-        # if ".." not in dates:
-        #     if datetime.strptime(dates[0], DATETIME_RFC339) > datetime.strptime(
-        #         dates[1], DATETIME_RFC339
-        #     ):
-        #         raise ValueError(
-        #             "Invalid datetime range, must match format (begin_date, end_date)"
-        #         )
         return v
 
 
