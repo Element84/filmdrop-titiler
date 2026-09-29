@@ -17,7 +17,7 @@ from pydantic import conint
 from pystac_client import Client
 import rasterio
 from rio_tiler.constants import MAX_THREADS
-from rio_tiler.io import COGReader
+from rio_tiler.io import Reader
 from rio_tiler.mosaic.methods import PixelSelectionMethod
 from rio_tiler.utils import Timer
 from starlette.requests import Request
@@ -129,12 +129,13 @@ class mosaicExtension(FactoryExtension):
         ) -> MosaicJSON | None:
             if features:
                 try:
-                    with COGReader(asset_href(features[0], asset_name)) as cog:
-                        info = cog.info()
+                    with Reader(asset_href(features[0], asset_name)) as cog:
+                        minzoom = cog.minzoom
+                        maxzoom = cog.maxzoom
                     return MosaicJSON.from_features(
                         features,
-                        minzoom=info.minzoom,
-                        maxzoom=info.maxzoom,
+                        minzoom=minzoom,
+                        maxzoom=maxzoom,
                         accessor=partial(asset_href, asset_name=asset_name),
                     )
 
@@ -308,7 +309,7 @@ class mosaicExtension(FactoryExtension):
                     query=mosaic_request.query,
                     max_items=mosaic_request.max_items
                     if mosaic_request.max_items and mosaic_request.max_items < self.default_max_items
-                    else factory.default_max_items,
+                    else self.default_max_items,
                     limit=mosaic_request.limit if mosaic_request.limit else 100,
                 )
 
@@ -361,12 +362,12 @@ class mosaicExtension(FactoryExtension):
                     mosaic_read = t.from_start
                     timings.append(("mosaicread", round(mosaic_read * 1000, 2)))
 
-                    breakpoint()
                     data, _ = src_dst.tile(
                         x,
                         y,
                         z,
-                        #pixel_selection,
+                        # Pixel selection no longer appears to be a valid positional arg for this tile
+                        # pixel_selection,
                         threads=threads,
                         tilesize=tilesize,
                         **layer_params,
@@ -381,7 +382,7 @@ class mosaicExtension(FactoryExtension):
                 image = data.post_process()
             timings.append(("postprocess", round(t.elapsed * 1000, 2)))
 
-            if render_params.rescale:
+            if hasattr(render_params, "rescale"):
                 image.rescale(render_params.rescale)
 
             with Timer() as t:
@@ -539,7 +540,7 @@ class mosaicExtension(FactoryExtension):
             response_model=MosaicEntity,
         )
         async def post_mosaics(
-            mosaic_json: MosaicJSON,
+            mosaic_json: MosaicJSON | UrisRequestBody | StacApiQueryRequestBody,
             request: Request,
             response: Response,
             content_type: str | None = Header(None),
@@ -625,7 +626,7 @@ class mosaicExtension(FactoryExtension):
                             format,
                             layer_params.as_dict(),
                             dataset_params.as_dict(),
-                            render_params,
+                            render_params.as_dict(),
                             colormap,
                             pixel_selection,
                             reader_params.as_dict(),
