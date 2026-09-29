@@ -665,6 +665,12 @@ class mosaicExtension(FactoryExtension):
             colormap=Depends(factory.colormap_dependency),  # noqa
         ):
             """OGC WMTS endpoint."""
+            if minzoom and maxzoom:
+                if minzoom > maxzoom:
+                    raise HTTPException(
+                        status_code=422,
+                        detail="minzoom parameter must be less than or equal to maxzoom",
+                    )
 
             tiles_url = factory.url_for(
                 request,

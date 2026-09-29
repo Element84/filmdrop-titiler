@@ -83,6 +83,8 @@ class StacApiQueryRequestBody(ExtendedSearch):
         datetime validation
         overrides default validation due to issue https://github.com/stac-utils/stac-pydantic/issues/78
         """
+        if v is None:
+            return v
         if "/" in v:
             values = v.split("/")
         else:
