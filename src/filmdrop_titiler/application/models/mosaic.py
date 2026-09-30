@@ -15,6 +15,7 @@ class MosaicEntity(BaseModel):
     links: list[Link]
 
 
+# Regex to validate STAC query datetime strings as valid RFC3339 timestamps
 rfc3339_regex_str = (
     r"^(\d\d\d\d)\-(\d\d)\-(\d\d)(T|t)"
     r"(\d\d):(\d\d):(\d\d)(\.\d+)?(Z|([-+])(\d\d):(\d\d))$"
