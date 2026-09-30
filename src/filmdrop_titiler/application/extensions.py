@@ -13,7 +13,7 @@ from cogeo_mosaic.backends import DynamoDBBackend
 from cogeo_mosaic.errors import MosaicError
 from cogeo_mosaic.mosaic import MosaicJSON
 from fastapi import Depends, Header, HTTPException, Path, Query
-from pydantic import conint
+from pydantic import Field
 from pystac_client import Client
 from rio_tiler.constants import MAX_THREADS
 from rio_tiler.io import Reader
@@ -28,6 +28,10 @@ from starlette.status import (
     HTTP_409_CONFLICT,
     HTTP_415_UNSUPPORTED_MEDIA_TYPE,
     HTTP_500_INTERNAL_SERVER_ERROR,
+)
+from titiler.core.dependencies import (
+    BidxParams,
+    DatasetParams,
 )
 from titiler.core.factory import FactoryExtension, img_endpoint_params
 from titiler.core.models.mapbox import TileJSON
@@ -48,12 +52,14 @@ from filmdrop_titiler.application.models.mosaic import (
 
 from .settings import ApiSettings
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class mosaicExtension(FactoryExtension):
     default_max_items = 1000
 
-    def register(self, factory: MosaicTilerFactory):
+    def register(self, factory: MosaicTilerFactory):  # type: ignore[override]
         async def retrieve(
             mosaic_id: str, reader_params, include_tiles: bool = False
         ) -> MosaicJSON | None:
@@ -83,8 +89,10 @@ class mosaicExtension(FactoryExtension):
         ) -> None:
             try:
                 existing = await retrieve(mosaic_id, env)
-            except Exception:
-                existing = False
+            except HTTPException:
+                raise
+            except Exception:  # noqa
+                existing = None
 
             if not overwrite and existing:
                 raise StoreException("Attempting to create already existing mosaic")
@@ -117,7 +125,7 @@ class mosaicExtension(FactoryExtension):
             if href := feature.get("assets", {}).get(asset_name, {}).get("href"):
                 return href
             else:
-                raise Exception(f"Asset with name '{asset_name}' could not be found.")
+                raise ValueError(f"Asset with name '{asset_name}' could not be found.")
 
         def extract_mosaicjson_from_features(
             features: list[dict], asset_name: str
@@ -140,11 +148,11 @@ class mosaicExtension(FactoryExtension):
                 # as this method only handles Polygon, LineString, and Point :grimace:
                 # https://github.com/mapbox/supermercado/issues/47
                 except UnboundLocalError as e:
-                    raise Exception(
+                    raise ValueError(
                         "STAC Items likely have MultiPolygon geometry, and only Polygon is supported."
                     ) from e
                 except Exception as e:
-                    raise Exception(
+                    raise RuntimeError(
                         f"Error extracting mosaic data from results: {e}"
                     ) from e
             else:
@@ -217,8 +225,8 @@ class mosaicExtension(FactoryExtension):
 
                 return mosaicjson
 
-            except HTTPException as e:
-                raise e
+            except HTTPException:
+                raise
             except Exception as e:
                 raise HTTPException(
                     HTTP_500_INTERNAL_SERVER_ERROR, f"Error: {e}"
@@ -290,7 +298,7 @@ class mosaicExtension(FactoryExtension):
         def mosaic_write(
             mosaic_uri: str, mosaicjson: MosaicJSON, overwrite: bool
         ) -> None:
-            with factory.backend(mosaic_uri, mosaic_def=mosaicjson) as mosaic:
+            with factory.backend(mosaic_uri, mosaic_def=mosaicjson) as mosaic:  # type: ignore[call-arg]
                 mosaic.write(overwrite=overwrite)
 
         def execute_stac_search(mosaic_request: StacApiQueryRequestBody) -> list[dict]:
@@ -311,10 +319,10 @@ class mosaicExtension(FactoryExtension):
                 )
 
                 return list(search_result.items_as_dicts())
-            except TooManyResultsException as e:
-                raise e
+            except TooManyResultsException:
+                raise
             except Exception as e:
-                raise Exception(f"STAC Search error: {e}") from e
+                raise RuntimeError(f"STAC Search error: {e}") from e
 
         def read_mosaicjson_sync(
             mosaic_uri: str, reader_params, include_tiles: bool
@@ -336,7 +344,7 @@ class mosaicExtension(FactoryExtension):
             x: int,
             y: int,
             scale: int,
-            format: ImageType,
+            format: ImageType | None,
             layer_params,
             dataset_params,
             render_params,
@@ -409,7 +417,7 @@ class mosaicExtension(FactoryExtension):
         async def get_mosaic(
             request: Request,
             mosaic_id: str,
-            env=Depends(factory.environment_dependency),
+            env: dict = Depends(factory.environment_dependency),
             reader_params=Depends(factory.reader_dependency),
         ) -> MosaicEntity:
             self_uri = factory.url_for(request, "get_mosaic", mosaic_id=mosaic_id)
@@ -436,7 +444,7 @@ class mosaicExtension(FactoryExtension):
         )
         async def get_mosaic_mosaicjson(
             mosaic_id: str,
-            env=Depends(factory.environment_dependency),
+            env: dict = Depends(factory.environment_dependency),
             reader_params=Depends(factory.reader_dependency),
         ) -> MosaicJSON:
             with rasterio.Env(**env):
@@ -473,10 +481,10 @@ class mosaicExtension(FactoryExtension):
             ),
             minzoom: int | None = Query(None, description="Overwrite default minzoom."),
             maxzoom: int | None = Query(None, description="Overwrite default maxzoom."),
-            layer_params=Depends(factory.layer_dependency),  # noqa
-            dataset_params=Depends(factory.dataset_dependency),  # noqa
-            render_params=Depends(factory.render_dependency),  # noqa
-            colormap=Depends(factory.colormap_dependency),  # noqa,
+            layer_params: BidxParams = Depends(factory.layer_dependency),
+            dataset_params: DatasetParams = Depends(factory.dataset_dependency),
+            render_params=Depends(factory.render_dependency),
+            colormap=Depends(factory.colormap_dependency),
             env=Depends(factory.environment_dependency),
             reader_params=Depends(factory.reader_dependency),
         ) -> TileJSON:
@@ -502,12 +510,14 @@ class mosaicExtension(FactoryExtension):
 
             with rasterio.Env(**env):
                 if mosaicjson := await retrieve(mosaic_id, reader_params.as_dict()):
-                    center = list(mosaicjson.center)
-                    if minzoom is not None:
-                        center[-1] = minzoom
+                    center = mosaicjson.center
+                    bounds = list(mosaicjson.bounds)
+                    if center is not None and minzoom is not None:
+                        center_x, center_y, _ = center
+                        center = (center_x, center_y, minzoom)
                     return TileJSON(
-                        bounds=mosaicjson.bounds,
-                        center=tuple(center),
+                        bounds=bounds,
+                        center=center,
                         minzoom=minzoom if minzoom is not None else mosaicjson.minzoom,
                         maxzoom=maxzoom if maxzoom is not None else mosaicjson.maxzoom,
                         name=mosaic_id,
@@ -554,7 +564,7 @@ class mosaicExtension(FactoryExtension):
                     HTTP_409_CONFLICT, "Error: mosaic with given ID already exists"
                 ) from e
             except Exception as e:
-                logging.error(f"could not save mosaic: {e}")
+                logger.error(f"could not save mosaic: {e}")
                 raise HTTPException(
                     HTTP_500_INTERNAL_SERVER_ERROR, "Error: could not save mosaic"
                 ) from e
@@ -585,10 +595,10 @@ class mosaicExtension(FactoryExtension):
             x: int = Path(..., description="Mercator tiles's column"),
             y: int = Path(..., description="Mercator tiles's row"),
             scale: Annotated[
-                conint(gt=0, lt=4), "Tile size scale. 1=256x256, 2=512x512..."
+                int, Field(gt=0, lt=4), "Tile size scale. 1=256x256, 2=512x512..."
             ] = 1,
             format: Annotated[
-                ImageType,
+                ImageType | None,
                 "Output image type. Default is auto.",
             ] = None,
             layer_params=Depends(factory.layer_dependency),
@@ -623,7 +633,7 @@ class mosaicExtension(FactoryExtension):
                             colormap,
                             reader_params.as_dict(),
                         ),
-                        int(os.getenv("MOSAIC_TILE_TIMEOUT", 30)),
+                        int(os.getenv("MOSAIC_TILE_TIMEOUT", "30")),
                     )
             except TimeoutError as e:
                 raise HTTPException(
@@ -657,18 +667,17 @@ class mosaicExtension(FactoryExtension):
             ),
             minzoom: int | None = Query(None, description="Overwrite default minzoom."),
             maxzoom: int | None = Query(None, description="Overwrite default maxzoom."),
-            layer_params=Depends(factory.layer_dependency),  # noqa
-            dataset_params=Depends(factory.dataset_dependency),  # noqa
-            render_params=Depends(factory.render_dependency),  # noqa
-            colormap=Depends(factory.colormap_dependency),  # noqa
+            layer_params=Depends(factory.layer_dependency),
+            dataset_params=Depends(factory.dataset_dependency),
+            render_params=Depends(factory.render_dependency),
+            colormap=Depends(factory.colormap_dependency),
         ):
             """OGC WMTS endpoint."""
-            if minzoom and maxzoom:
-                if minzoom > maxzoom:
-                    raise HTTPException(
-                        status_code=422,
-                        detail="minzoom parameter must be less than or equal to maxzoom",
-                    )
+            if minzoom and maxzoom and minzoom > maxzoom:
+                raise HTTPException(
+                    status_code=422,
+                    detail="minzoom parameter must be less than or equal to maxzoom",
+                )
 
             tiles_url = factory.url_for(
                 request,

@@ -77,3 +77,6 @@ testpaths = ["tests"]
 [[tool.mypy.overrides]]
 module=["starlette_cramjam", "starlette_cramjam.middleware", "rasterio"]
 ignore_missing_imports = true
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query"]
