@@ -1,36 +1,28 @@
 """FastAPI application for TiTiler."""
 
 from typing import Annotated, Literal
-from starlette.requests import Request
+
 import rasterio
-from rio_tiler.io import Reader
-from titiler.core.resources.enums import MediaType
-
-from fastapi import FastAPI, Query
-from starlette.middleware.cors import CORSMiddleware
-from starlette_cramjam.middleware import CompressionMiddleware
-from rio_tiler.io import STACReader
 from cogeo_mosaic.backends import MosaicBackend as MosaicJSONBackend
-from starlette import status
-
-from titiler.mosaic.errors import MOSAIC_STATUS_CODES
 from cogeo_mosaic.errors import MosaicAuthError, MosaicError, MosaicNotFoundError
-
-from filmdrop_titiler.application import __version__ as titiler_version
-from filmdrop_titiler.application.settings import ApiSettings
+from fastapi import FastAPI, Query
+from rio_tiler.io import Reader, STACReader
+from starlette import status
+from starlette.middleware.cors import CORSMiddleware
+from starlette.requests import Request
+from starlette_cramjam.middleware import CompressionMiddleware
 from titiler.core.errors import DEFAULT_STATUS_CODES, add_exception_handlers
-from titiler.core.utils import accept_media_type, create_html_response, update_openapi
 from titiler.core.factory import (
     MultiBaseTilerFactory,
     TilerFactory,
 )
-from titiler.mosaic.factory import MosaicTilerFactory
 from titiler.core.middleware import (
     CacheControlMiddleware,
     LowerCaseQueryStringMiddleware,
 )
-from titiler.mosaic.extensions.mosaicjson import MosaicJSONExtension
-from titiler.mosaic.extensions.wmts import wmtsExtension as mosaic_wmtsExtension
+from titiler.core.models.OGC import Conformance, Landing
+from titiler.core.resources.enums import MediaType
+from titiler.core.utils import accept_media_type, create_html_response, update_openapi
 from titiler.extensions import (
     cogValidateExtension,
     cogViewerExtension,
@@ -39,7 +31,14 @@ from titiler.extensions import (
     stacViewerExtension,
     wmtsExtension,
 )
-from titiler.core.models.OGC import Conformance, Landing
+from titiler.mosaic.errors import MOSAIC_STATUS_CODES
+from titiler.mosaic.extensions.mosaicjson import MosaicJSONExtension
+from titiler.mosaic.extensions.wmts import wmtsExtension as mosaic_wmtsExtension
+from titiler.mosaic.factory import MosaicTilerFactory
+
+from filmdrop_titiler.application import __version__ as titiler_version
+from filmdrop_titiler.application.extensions import mosaicExtension
+from filmdrop_titiler.application.settings import ApiSettings
 from filmdrop_titiler.application.templates.template import titiler_templates
 
 api_settings = ApiSettings()
@@ -117,6 +116,7 @@ if not api_settings.disable_mosaic:
         extensions=[
             MosaicJSONExtension(),
             mosaic_wmtsExtension(),
+            mosaicExtension(),
         ],
         enable_telemetry=api_settings.telemetry_enabled,
         templates=titiler_templates,

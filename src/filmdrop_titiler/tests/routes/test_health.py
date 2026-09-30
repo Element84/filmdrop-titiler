@@ -1,5 +1,6 @@
-from filmdrop_titiler.application import __version__ as titiler_version
 import rasterio
+
+from filmdrop_titiler.application import __version__ as titiler_version
 
 
 def test_health(app):

@@ -1,9 +1,11 @@
-from filmdrop_titiler.application.settings import ApiSettings
 import json
-from filmdrop_titiler.application.main import app
-from titiler.core.middleware import LoggerMiddleware, TotalTimeMiddleware
-from logging import config as log_config
 import logging
+from logging import config as log_config
+
+from titiler.core.middleware import LoggerMiddleware, TotalTimeMiddleware
+
+from filmdrop_titiler.application.main import app
+from filmdrop_titiler.application.settings import ApiSettings
 
 logging.getLogger("botocore.credentials").disabled = True
 logging.getLogger("botocore.utils").disabled = True

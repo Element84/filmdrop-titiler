@@ -1,6 +1,6 @@
+import jinja2
 from starlette.templating import Jinja2Templates
 
-import jinja2
 from filmdrop_titiler.application.settings import ApiSettings
 
 api_settings = ApiSettings()
