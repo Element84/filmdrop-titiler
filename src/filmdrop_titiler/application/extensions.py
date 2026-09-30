@@ -711,10 +711,10 @@ class mosaicExtension(FactoryExtension):
                 tm = f"""
                         <TileMatrix>
                             <ows:Identifier>{matrix.id}</ows:Identifier>
-                            <ScaleDenominator>{matrix.scaleDenominator}</ScaleDenominator>
+                            <ScaleDenominator>{matrix.scaleDenominator / tile_scale}</ScaleDenominator>
                             <TopLeftCorner>{matrix.pointOfOrigin[0]} {matrix.pointOfOrigin[1]}</TopLeftCorner>
-                            <TileWidth>{matrix.tileWidth}</TileWidth>
-                            <TileHeight>{matrix.tileHeight}</TileHeight>
+                            <TileWidth>{matrix.tileWidth * tile_scale}</TileWidth>
+                            <TileHeight>{matrix.tileHeight * tile_scale}</TileHeight>
                             <MatrixWidth>{matrix.matrixWidth}</MatrixWidth>
                             <MatrixHeight>{matrix.matrixHeight}</MatrixHeight>
                         </TileMatrix>"""
