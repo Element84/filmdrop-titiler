@@ -17,6 +17,7 @@ from pydantic import Field
 from pystac_client import Client
 from rio_tiler.constants import MAX_THREADS
 from rio_tiler.io import Reader
+from rio_tiler.types import ColorMapType
 from rio_tiler.utils import Timer
 from starlette.requests import Request
 from starlette.responses import Response
@@ -32,6 +33,8 @@ from starlette.status import (
 from titiler.core.dependencies import (
     BidxParams,
     DatasetParams,
+    DefaultDependency,
+    ImageRenderingParams,
 )
 from titiler.core.factory import FactoryExtension, img_endpoint_params
 from titiler.core.models.mapbox import TileJSON
@@ -61,7 +64,7 @@ class mosaicExtension(FactoryExtension):
 
     def register(self, factory: MosaicTilerFactory):  # type: ignore[override]
         async def retrieve(
-            mosaic_id: str, reader_params, include_tiles: bool = False
+            mosaic_id: str, reader_params: dict, include_tiles: bool = False
         ) -> MosaicJSON | None:
             mosaic_uri = mk_src_path(mosaic_id)
 
@@ -85,7 +88,7 @@ class mosaicExtension(FactoryExtension):
                 return None
 
         async def store(
-            mosaic_id: str, mosaicjson: MosaicJSON, env, overwrite: bool
+            mosaic_id: str, mosaicjson: MosaicJSON, env: dict, overwrite: bool
         ) -> None:
             try:
                 existing = await retrieve(mosaic_id, env)
@@ -239,7 +242,7 @@ class mosaicExtension(FactoryExtension):
             else:
                 return f"{settings.mosaic_backend}{settings.mosaic_host}/{mosaic_id}{settings.mosaic_format}"
 
-        def mk_mosaic_entity(mosaic_id, self_uri) -> MosaicEntity:
+        def mk_mosaic_entity(mosaic_id: str, self_uri: str) -> MosaicEntity:
             return MosaicEntity(
                 id=mosaic_id,
                 links=[
@@ -273,7 +276,7 @@ class mosaicExtension(FactoryExtension):
                 ],
             )
 
-        async def populate_mosaicjson(request, content_type):
+        async def populate_mosaicjson(request: Request, content_type: str | None):
             body_json = await request.json()
             content_type = (content_type or "").split(";", 1)[0].strip().lower()
             if content_type in (
@@ -325,7 +328,7 @@ class mosaicExtension(FactoryExtension):
                 raise RuntimeError(f"STAC Search error: {e}") from e
 
         def read_mosaicjson_sync(
-            mosaic_uri: str, reader_params, include_tiles: bool
+            mosaic_uri: str, reader_params: dict, include_tiles: bool
         ) -> MosaicJSON:
             with factory.backend(
                 mosaic_uri,
@@ -345,11 +348,11 @@ class mosaicExtension(FactoryExtension):
             y: int,
             scale: int,
             format: ImageType | None,
-            layer_params,
-            dataset_params,
-            render_params,
-            colormap,
-            reader_params,
+            layer_params: dict,
+            dataset_params: dict,
+            render_params: dict,
+            colormap: ColorMapType,
+            reader_params: dict,
         ) -> tuple[bytes, Any, ImageType, list[tuple[str, float]]]:
             """Create map tile from a COG."""
             timings = []
@@ -418,7 +421,7 @@ class mosaicExtension(FactoryExtension):
             request: Request,
             mosaic_id: str,
             env: dict = Depends(factory.environment_dependency),
-            reader_params=Depends(factory.reader_dependency),
+            reader_params: DefaultDependency = Depends(factory.reader_dependency),
         ) -> MosaicEntity:
             self_uri = factory.url_for(request, "get_mosaic", mosaic_id=mosaic_id)
             with rasterio.Env(**env):
@@ -445,7 +448,7 @@ class mosaicExtension(FactoryExtension):
         async def get_mosaic_mosaicjson(
             mosaic_id: str,
             env: dict = Depends(factory.environment_dependency),
-            reader_params=Depends(factory.reader_dependency),
+            reader_params: DefaultDependency = Depends(factory.reader_dependency),
         ) -> MosaicJSON:
             with rasterio.Env(**env):
                 if m := await retrieve(
@@ -483,10 +486,10 @@ class mosaicExtension(FactoryExtension):
             maxzoom: int | None = Query(None, description="Overwrite default maxzoom."),
             layer_params: BidxParams = Depends(factory.layer_dependency),
             dataset_params: DatasetParams = Depends(factory.dataset_dependency),
-            render_params=Depends(factory.render_dependency),
-            colormap=Depends(factory.colormap_dependency),
-            env=Depends(factory.environment_dependency),
-            reader_params=Depends(factory.reader_dependency),
+            render_params: ImageRenderingParams = Depends(factory.render_dependency),
+            colormap: ColorMapType = Depends(factory.colormap_dependency),
+            env: dict = Depends(factory.environment_dependency),
+            reader_params: DefaultDependency = Depends(factory.reader_dependency),
         ) -> TileJSON:
             """Return TileJSON document for a MosaicJSON."""
 
@@ -548,7 +551,7 @@ class mosaicExtension(FactoryExtension):
             request: Request,
             response: Response,
             content_type: str | None = Header(None),
-            env=Depends(factory.environment_dependency),
+            env: dict = Depends(factory.environment_dependency),
         ) -> MosaicEntity:
             """Create a MosaicJSON"""
 
@@ -601,12 +604,12 @@ class mosaicExtension(FactoryExtension):
                 ImageType | None,
                 "Output image type. Default is auto.",
             ] = None,
-            layer_params=Depends(factory.layer_dependency),
-            dataset_params=Depends(factory.dataset_dependency),
-            render_params=Depends(factory.render_dependency),
-            colormap=Depends(factory.colormap_dependency),
-            env=Depends(factory.environment_dependency),
-            reader_params=Depends(factory.reader_dependency),
+            layer_params: BidxParams = Depends(factory.layer_dependency),
+            dataset_params: DatasetParams = Depends(factory.dataset_dependency),
+            render_params: ImageRenderingParams = Depends(factory.render_dependency),
+            colormap: ColorMapType = Depends(factory.colormap_dependency),
+            env: dict = Depends(factory.environment_dependency),
+            reader_params: DefaultDependency = Depends(factory.reader_dependency),
         ):
             """Create map tile from a mosaic."""
 
@@ -667,10 +670,10 @@ class mosaicExtension(FactoryExtension):
             ),
             minzoom: int | None = Query(None, description="Overwrite default minzoom."),
             maxzoom: int | None = Query(None, description="Overwrite default maxzoom."),
-            layer_params=Depends(factory.layer_dependency),
-            dataset_params=Depends(factory.dataset_dependency),
-            render_params=Depends(factory.render_dependency),
-            colormap=Depends(factory.colormap_dependency),
+            layer_params: BidxParams = Depends(factory.layer_dependency),
+            dataset_params: DatasetParams = Depends(factory.dataset_dependency),
+            render_params: ImageRenderingParams = Depends(factory.render_dependency),
+            colormap: ColorMapType = Depends(factory.colormap_dependency),
         ):
             """OGC WMTS endpoint."""
             if minzoom and maxzoom and minzoom > maxzoom:
