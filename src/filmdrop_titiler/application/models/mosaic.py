@@ -1,21 +1,18 @@
 """Titiler.mosaic Models."""
 
 import re
-from enum import auto
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, validator
-
 from stac_pydantic.api.search import ExtendedSearch
 from stac_pydantic.links import Link
-from stac_pydantic.utils import AutoValueEnum
 
 
 class MosaicEntity(BaseModel):
     """Mosaic Model."""
 
     id: str
-    links: List[Link]
+    links: list[Link]
 
 
 rfc3339_regex_str = (
@@ -29,16 +26,16 @@ class StacApiQueryRequestBody(ExtendedSearch):
     """Common request params for MosaicJSON CRUD operations"""
 
     stac_api_root: str
-    asset_name: Optional[str] = None
-    name: Optional[str] = None
-    description: Optional[str] = None
-    attribution: Optional[str] = None
-    version: Optional[str] = None
+    asset_name: str | None = None
+    name: str | None = None
+    description: str | None = None
+    attribution: str | None = None
+    version: str | None = None
 
     # overriding limit so we can tell if it's defined or not
-    limit: Optional[int] = 10
+    limit: int | None = 10
 
-    max_items: Optional[int] = None
+    max_items: int | None = None
 
     filter: dict[str, Any] | None = None
 
@@ -74,13 +71,13 @@ class UrisRequestBody(BaseModel):
     """model for a source body to create a mosaicjson"""
 
     # option 2 - a list of files and min/max zoom
-    urls: List[str]
-    minzoom: Optional[int] = None
-    maxzoom: Optional[int] = None
-    name: Optional[str] = None
-    description: Optional[str] = None
-    attribution: Optional[str] = None
-    version: Optional[str] = None
+    urls: list[str]
+    minzoom: int | None = None
+    maxzoom: int | None = None
+    name: str | None = None
+    description: str | None = None
+    attribution: str | None = None
+    version: str | None = None
 
 
 class TooManyResultsException(Exception):

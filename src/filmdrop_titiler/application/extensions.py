@@ -1,24 +1,22 @@
 import asyncio
-from dataclasses import dataclass
-from functools import partial
 import logging
 import os
-import time
+import uuid
+from dataclasses import dataclass
+from functools import partial
 from typing import Annotated, Any
 from urllib.parse import urlencode
-import uuid
 
-from cogeo_mosaic.backends import DynamoDBBackend, MosaicBackend
+import morecantile
+import rasterio
+from cogeo_mosaic.backends import DynamoDBBackend
 from cogeo_mosaic.errors import MosaicError
 from cogeo_mosaic.mosaic import MosaicJSON
 from fastapi import Depends, Header, HTTPException, Path, Query
-import morecantile
 from pydantic import conint
 from pystac_client import Client
-import rasterio
 from rio_tiler.constants import MAX_THREADS
 from rio_tiler.io import Reader
-from rio_tiler.mosaic.methods import PixelSelectionMethod
 from rio_tiler.utils import Timer
 from starlette.requests import Request
 from starlette.responses import Response
@@ -31,14 +29,13 @@ from starlette.status import (
     HTTP_415_UNSUPPORTED_MEDIA_TYPE,
     HTTP_500_INTERNAL_SERVER_ERROR,
 )
-
 from titiler.core.factory import FactoryExtension, img_endpoint_params
 from titiler.core.models.mapbox import TileJSON
 from titiler.core.resources.enums import ImageType, MediaType, OptionalHeader
-from titiler.mosaic.factory import MosaicTilerFactory
 from titiler.core.resources.responses import (
     XMLResponse,
 )
+from titiler.mosaic.factory import MosaicTilerFactory
 
 from filmdrop_titiler.application.models.mosaic import (
     Link,
@@ -48,10 +45,8 @@ from filmdrop_titiler.application.models.mosaic import (
     TooManyResultsException,
     UrisRequestBody,
 )
+
 from .settings import ApiSettings
-
-
-
 
 
 @dataclass
@@ -75,7 +70,7 @@ class mosaicExtension(FactoryExtension):
                     ),
                     20,
                 )
-            except asyncio.TimeoutError as e:
+            except TimeoutError as e:
                 raise HTTPException(
                     HTTP_500_INTERNAL_SERVER_ERROR,
                     "Error: timeout retrieving mosaic from datastore.",
@@ -109,7 +104,7 @@ class mosaicExtension(FactoryExtension):
                     ),
                     20,
                 )
-            except asyncio.TimeoutError as e:
+            except TimeoutError as e:
                 raise HTTPException(
                     HTTP_500_INTERNAL_SERVER_ERROR,
                     "Error: timeout storing mosaic in datastore",
@@ -155,7 +150,7 @@ class mosaicExtension(FactoryExtension):
             else:
                 return None
 
-        async def mosaicjson_from_stac_api_query(  # noqa: C901
+        async def mosaicjson_from_stac_api_query(
             req: StacApiQueryRequestBody,
         ) -> MosaicJSON:
             """Create a mosaic for the given parameters"""
@@ -170,11 +165,13 @@ class mosaicExtension(FactoryExtension):
                 try:
                     features = await asyncio.wait_for(
                         asyncio.get_running_loop().run_in_executor(
-                            None, execute_stac_search, req  # executor  # func
+                            None,
+                            execute_stac_search,
+                            req,  # executor  # func
                         ),
                         30,
                     )
-                except asyncio.TimeoutError as e:
+                except TimeoutError as e:
                     raise HTTPException(
                         HTTP_500_INTERNAL_SERVER_ERROR,
                         "Error: timeout executing STAC API search.",
@@ -201,7 +198,7 @@ class mosaicExtension(FactoryExtension):
                         ),
                         60,  # todo: how much time should/can it take?
                     )
-                except asyncio.TimeoutError as e:
+                except TimeoutError as e:
                     raise HTTPException(
                         HTTP_500_INTERNAL_SERVER_ERROR,
                         "Error: timeout reading a COG asset and generating MosaicJSON definition",
@@ -227,14 +224,12 @@ class mosaicExtension(FactoryExtension):
                     HTTP_500_INTERNAL_SERVER_ERROR, f"Error: {e}"
                 ) from e
 
-
         def mk_src_path(mosaic_id: str) -> str:
             settings = ApiSettings()
             if settings.mosaic_backend == "dynamodb://":
                 return f"{settings.mosaic_backend}{settings.mosaic_host}:{mosaic_id}"
             else:
                 return f"{settings.mosaic_backend}{settings.mosaic_host}/{mosaic_id}{settings.mosaic_format}"
-
 
         def mk_mosaic_entity(mosaic_id, self_uri) -> MosaicEntity:
             return MosaicEntity(
@@ -309,7 +304,8 @@ class mosaicExtension(FactoryExtension):
                     query=mosaic_request.query,
                     filter=mosaic_request.filter,
                     max_items=mosaic_request.max_items
-                    if mosaic_request.max_items and mosaic_request.max_items < self.default_max_items
+                    if mosaic_request.max_items
+                    and mosaic_request.max_items < self.default_max_items
                     else self.default_max_items,
                     limit=mosaic_request.limit if mosaic_request.limit else 100,
                 )
@@ -353,24 +349,26 @@ class mosaicExtension(FactoryExtension):
             tilesize = scale * 256
 
             threads = int(os.getenv("MOSAIC_CONCURRENCY", MAX_THREADS))
-            with Timer() as t:
-                with factory.backend(
+            with (
+                Timer() as t,
+                factory.backend(
                     mosaic_uri,
                     reader=factory.dataset_reader,
                     reader_options={**reader_params},
-                ) as src_dst:
-                    mosaic_read = t.from_start
-                    timings.append(("mosaicread", round(mosaic_read * 1000, 2)))
+                ) as src_dst,
+            ):
+                mosaic_read = t.from_start
+                timings.append(("mosaicread", round(mosaic_read * 1000, 2)))
 
-                    data, _ = src_dst.tile(
-                        x,
-                        y,
-                        z,
-                        threads=threads,
-                        tilesize=tilesize,
-                        **layer_params,
-                        **dataset_params,
-                    )
+                data, _ = src_dst.tile(
+                    x,
+                    y,
+                    z,
+                    threads=threads,
+                    tilesize=tilesize,
+                    **layer_params,
+                    **dataset_params,
+                )
             timings.append(("dataread", round((t.elapsed - mosaic_read) * 1000, 2)))
 
             if not format:
@@ -381,7 +379,7 @@ class mosaicExtension(FactoryExtension):
             timings.append(("postprocess", round(t.elapsed * 1000, 2)))
 
             if "rescale" in render_params:
-                image.rescale(render_params['rescale'])
+                image.rescale(render_params["rescale"])
 
             with Timer() as t:
                 content = image.render(
@@ -442,7 +440,9 @@ class mosaicExtension(FactoryExtension):
             reader_params=Depends(factory.reader_dependency),
         ) -> MosaicJSON:
             with rasterio.Env(**env):
-                if m := await retrieve(mosaic_id, reader_params.as_dict(), include_tiles=True):
+                if m := await retrieve(
+                    mosaic_id, reader_params.as_dict(), include_tiles=True
+                ):
                     return m
                 else:
                     raise HTTPException(
@@ -471,12 +471,8 @@ class mosaicExtension(FactoryExtension):
             tile_scale: int = Query(
                 1, gt=0, lt=4, description="Tile size scale. 1=256x256, 2=512x512..."
             ),
-            minzoom: int | None = Query(
-                None, description="Overwrite default minzoom."
-            ),
-            maxzoom: int | None = Query(
-                None, description="Overwrite default maxzoom."
-            ),
+            minzoom: int | None = Query(None, description="Overwrite default minzoom."),
+            maxzoom: int | None = Query(None, description="Overwrite default maxzoom."),
             layer_params=Depends(factory.layer_dependency),  # noqa
             dataset_params=Depends(factory.dataset_dependency),  # noqa
             render_params=Depends(factory.render_dependency),  # noqa
@@ -606,7 +602,12 @@ class mosaicExtension(FactoryExtension):
 
             try:
                 with rasterio.Env(**env):
-                    (content, data_assets, img_format, timings) = await asyncio.wait_for(
+                    (
+                        content,
+                        data_assets,
+                        img_format,
+                        timings,
+                    ) = await asyncio.wait_for(
                         asyncio.get_running_loop().run_in_executor(
                             None,  # executor
                             render_tile,  # func
@@ -624,7 +625,7 @@ class mosaicExtension(FactoryExtension):
                         ),
                         int(os.getenv("MOSAIC_TILE_TIMEOUT", 30)),
                     )
-            except asyncio.TimeoutError as e:
+            except TimeoutError as e:
                 raise HTTPException(
                     HTTP_500_INTERNAL_SERVER_ERROR,
                     "Error: timeout executing rendering tile.",
@@ -654,12 +655,8 @@ class mosaicExtension(FactoryExtension):
             tile_scale: int = Query(
                 1, gt=0, lt=4, description="Tile size scale. 1=256x256, 2=512x512..."
             ),
-            minzoom: int | None = Query(
-                None, description="Overwrite default minzoom."
-            ),
-            maxzoom: int | None = Query(
-                None, description="Overwrite default maxzoom."
-            ),
+            minzoom: int | None = Query(None, description="Overwrite default minzoom."),
+            maxzoom: int | None = Query(None, description="Overwrite default maxzoom."),
             layer_params=Depends(factory.layer_dependency),  # noqa
             dataset_params=Depends(factory.dataset_dependency),  # noqa
             render_params=Depends(factory.render_dependency),  # noqa
@@ -676,14 +673,12 @@ class mosaicExtension(FactoryExtension):
             tiles_url = factory.url_for(
                 request,
                 "tile",
-                **{
-                    "mosaic_id": mosaic_id,
-                    "z": "{TileMatrix}",
-                    "x": "{TileCol}",
-                    "y": "{TileRow}",
-                    "scale": tile_scale,
-                    "format": tile_format.value,
-                },
+                mosaic_id=mosaic_id,
+                z="{TileMatrix}",
+                x="{TileCol}",
+                y="{TileRow}",
+                scale=tile_scale,
+                format=tile_format.value,
             )
 
             q = dict(request.query_params)
@@ -757,7 +752,7 @@ class mosaicExtension(FactoryExtension):
                     ),
                     20,
                 )
-            except asyncio.TimeoutError as e:
+            except TimeoutError as e:
                 raise HTTPException(
                     HTTP_500_INTERNAL_SERVER_ERROR,
                     "Error: timeout reading URLs and generating MosaicJSON definition",
