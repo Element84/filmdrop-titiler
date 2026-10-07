@@ -26,8 +26,11 @@ It uses a specific versioned release of TiTiler and is designed to be
 git clone https://github.com/Element84/filmdrop-titiler.git
 cd filmdrop-titiler
 
-# Install with development dependencies
-pip install -e ".[dev,server]"
+# Install with development dependencies (uv includes the dev group by default)
+uv sync --extra server
+
+# or with pip (25.1+)
+pip install --group dev -e ".[server]"
 ```
 
 ### For Production (Lambda)
@@ -77,6 +80,56 @@ curl "http://localhost:8000/cog/info?url=https://example.com/image.tif"
 ```bash
 curl "http://localhost:8000/cog/tiles/14/3241/6253?url=https://example.com/image.tif"
 ```
+
+### Local Development with Docker Compose
+
+`docker-compose.yml` runs the app together with
+[LocalStack](https://github.com/localstack/localstack) (DynamoDB and S3), with
+the mosaic endpoints backed by DynamoDB, as in a deployed environment.
+
+```bash
+docker compose up -d --build --wait
+curl http://localhost:8000/healthz
+```
+
+- App: <http://localhost:8000> (`./src` is mounted and the server auto-reloads)
+- LocalStack: <http://localhost:4566>
+- On startup, `localstack/init/01-resources.sh` creates the DynamoDB table `mosaics`.
+- LocalStack is pinned to `4.14.0` because newer images require a LocalStack
+  auth token.
+
+Create a mosaic from a STAC API query and fetch its TileJSON:
+
+```bash
+curl -X POST http://localhost:8000/mosaicjson/mosaics \
+  -H 'content-type: application/vnd.titiler.stac-api-query+json' \
+  -d '{
+    "stac_api_root": "https://earth-search.aws.element84.com/v2",
+    "collections": ["sentinel-2-l2a"],
+    "asset_name": "visual",
+    "bbox": [-105.3, 39.9, -105.1, 40.1],
+    "datetime": "2026-07-01T00:00:00Z/2026-07-30T23:59:59Z",
+    "max_items": 20,
+    "query": {"eo:cloud_cover": {"lt": 20}}
+  }'
+
+curl http://localhost:8000/mosaicjson/mosaics/<id>/tilejson.json
+curl -o tile.png http://localhost:8000/mosaicjson/mosaics/<id>/tiles/10/212/388.png
+```
+
+Notes:
+
+- Tiles over areas with no imagery return `204 No Content`. The first tile of a
+  large mosaic can take a while to render.
+- The mosaic items are written to LocalStack DynamoDB; inspect them with
+  `docker compose exec localstack awslocal dynamodb scan
+  --table-name mosaics --region us-east-1`.
+- The app reads public `s3://` COGs unsigned (`AWS_NO_SIGN_REQUEST=YES`). To read
+  from LocalStack S3 instead, see the comment in `docker-compose.yml`.
+- `boto3` is installed in the dev image only; the Lambda runtime provides it.
+- To run the tests in the container:
+  `docker compose run --rm app pytest src/filmdrop_titiler/tests`.
+- Stop everything with `docker compose down`.
 
 ## Deployment
 
@@ -142,10 +195,10 @@ filmdrop-titiler/
 
 ```bash
 # Install development dependencies
-pip install -e ".[dev,server]"
+uv sync --extra server
 
 # Run tests
-pytest
+uv run pytest
 ```
 
 ### Creating a Release

@@ -37,6 +37,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+server = [
+    "uvicorn[standard]>=0.12.0",
+]
+
+# uv installs the dev group by default on sync/run
+[dependency-groups]
 dev = [
     "pytest",
     "pytest-cov",
@@ -46,9 +52,6 @@ dev = [
     "pre-commit-hooks",
     "ruff",
     "mypy",
-]
-server = [
-    "uvicorn[standard]>=0.12.0",
 ]
 
 [project.urls]

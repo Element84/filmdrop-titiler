@@ -1,0 +1,38 @@
+services:
+  localstack:
+    # Pinned: 2026+ "latest" images require a LocalStack auth token
+    image: localstack/localstack:4.14.0
+    ports:
+      - "4566:4566"
+    environment:
+      SERVICES: dynamodb
+    volumes:
+      - ./localstack/init:/etc/localstack/init/ready.d:ro
+    healthcheck:
+      # Healthy only after the init script has created its resources
+      test: ["CMD-SHELL", "awslocal dynamodb describe-table --table-name mosaics --region us-east-1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    depends_on:
+      localstack:
+        condition: service_healthy
+    environment:
+      TITILER_API_DISABLE_MOSAIC: "false"
+      TITILER_API_MOSAIC_BACKEND: "dynamodb://"
+      # <region>/<table>; the app appends ":<mosaic_id>"
+      TITILER_API_MOSAIC_HOST: "us-east-1/mosaics"
+      AWS_ENDPOINT_URL: http://localstack:4566
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_REGION: us-east-1
+      AWS_DEFAULT_REGION: us-east-1
+      # GDAL reads of public s3:// COGs (e.g. Earth Search)
+      AWS_NO_SIGN_REQUEST: "YES"
+    volumes:
+      - ./src:/app/src
