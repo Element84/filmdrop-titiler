@@ -8,7 +8,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends libexpat1 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml README.md ./
+COPY pyproject.toml ./
 COPY src ./src
 
 # boto3 is provided by the Lambda runtime, so it is not a project dependency
