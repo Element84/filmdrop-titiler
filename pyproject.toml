@@ -78,7 +78,7 @@ addopts = "-v --cov=filmdrop_titiler --cov-report=term-missing"
 testpaths = ["src/filmdrop_titiler/tests"]
 
 [[tool.mypy.overrides]]
-module=["starlette_cramjam", "starlette_cramjam.middleware", "rasterio"]
+module=["starlette_cramjam", "starlette_cramjam.middleware", "rasterio", "rasterio.*", "cachetools"]
 ignore_missing_imports = true
 
 [tool.ruff.lint.flake8-bugbear]

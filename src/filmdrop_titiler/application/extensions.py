@@ -10,7 +10,6 @@ from urllib.parse import urlencode
 import morecantile
 import rasterio
 from cogeo_mosaic.backends import DynamoDBBackend
-from cogeo_mosaic.backends.stac import default_stac_accessor
 from cogeo_mosaic.errors import MosaicError
 from cogeo_mosaic.mosaic import MosaicJSON
 from fastapi import Depends, Header, HTTPException, Path, Query
@@ -55,6 +54,15 @@ from filmdrop_titiler.application.models.mosaic import (
     UrisRequestBody,
 )
 
+from .items import (
+    ITEM_QUADKEY_PREFIX,
+    STAC_ITEM_KEY_ASSET_TYPE,
+    StoredItemSTACReader,
+    item_key,
+    read_items,
+    slim_item,
+    write_items,
+)
 from .settings import ApiSettings
 
 logger = logging.getLogger(__name__)
@@ -86,21 +94,30 @@ class MosaicLayerParams(BidxExprParams):
     ] = None
 
 
-def configure_reader(src_dst: Any, reader_params: dict, layer_params: dict) -> None:
+def configure_reader(
+    src_dst: Any, reader_params: dict, layer_params: dict, x: int, y: int, z: int
+) -> None:
     """Point the backend at the reader matching how the mosaic was stored."""
     mosaic_def = src_dst.mosaic_def
-    if mosaic_def.asset_type == STAC_ITEM_ASSET_TYPE:
+    if mosaic_def.asset_type in (STAC_ITEM_KEY_ASSET_TYPE, STAC_ITEM_ASSET_TYPE):
         if "indexes" in layer_params:
             raise HTTPException(
                 HTTP_400_BAD_REQUEST,
                 "Error: bidx is not supported for multi-asset mosaics, "
                 "use assets={name}|bidx={indexes}.",
             )
-        src_dst.reader = STACReader
-        src_dst.reader_options = {
+        reader_options = {
             "default_assets": (mosaic_def.layers or {}).get("default_assets"),
             **reader_params,
         }
+        if mosaic_def.asset_type == STAC_ITEM_KEY_ASSET_TYPE:
+            src_dst.reader = StoredItemSTACReader
+            reader_options["items"] = read_items(
+                src_dst, src_dst.assets_for_tile(x, y, z)
+            )
+        else:
+            src_dst.reader = STACReader
+        src_dst.reader_options = reader_options
         return
 
     if used := ASSET_LAYER_PARAMS & layer_params.keys():
@@ -142,7 +159,11 @@ class mosaicExtension(FactoryExtension):
                 return None
 
         async def store(
-            mosaic_id: str, mosaicjson: MosaicJSON, env: dict, overwrite: bool
+            mosaic_id: str,
+            mosaicjson: MosaicJSON,
+            env: dict,
+            overwrite: bool,
+            items: dict[str, dict] | None = None,
         ) -> None:
             try:
                 existing = await retrieve(mosaic_id, env)
@@ -166,6 +187,7 @@ class mosaicExtension(FactoryExtension):
                         mosaic_uri,
                         mosaicjson,
                         overwrite,
+                        items,
                     ),
                     20,
                 )
@@ -186,27 +208,30 @@ class mosaicExtension(FactoryExtension):
 
         def extract_mosaicjson_from_features(
             features: list[dict], asset_name: str, multi_asset: bool
-        ) -> MosaicJSON | None:
+        ) -> tuple[MosaicJSON, dict[str, dict] | None] | None:
             if features:
                 try:
                     with Reader(asset_href(features[0], asset_name)) as cog:
                         minzoom = cog.minzoom
                         maxzoom = cog.maxzoom
                     if multi_asset:
-                        return MosaicJSON.from_features(
+                        mosaicjson = MosaicJSON.from_features(
                             features,
                             minzoom=minzoom,
                             maxzoom=maxzoom,
-                            accessor=default_stac_accessor,
-                            asset_type=STAC_ITEM_ASSET_TYPE,
+                            accessor=item_key,
+                            asset_type=STAC_ITEM_KEY_ASSET_TYPE,
                             layers={"default_assets": [asset_name]},
                         )
-                    return MosaicJSON.from_features(
+                        items = {item_key(f): slim_item(f) for f in features}
+                        return mosaicjson, items
+                    mosaicjson = MosaicJSON.from_features(
                         features,
                         minzoom=minzoom,
                         maxzoom=maxzoom,
                         accessor=partial(asset_href, asset_name=asset_name),
                     )
+                    return mosaicjson, None
 
                 # when Item geometry is a MultiPolygon (instead of a Polygon), supermercado raises
                 # handle error "local variable 'x' referenced before assignment"
@@ -226,7 +251,7 @@ class mosaicExtension(FactoryExtension):
 
         async def mosaicjson_from_stac_api_query(
             req: StacApiQueryRequestBody,
-        ) -> MosaicJSON:
+        ) -> tuple[MosaicJSON, dict[str, dict] | None]:
             """Create a mosaic for the given parameters"""
 
             if not req.stac_api_root:
@@ -263,7 +288,7 @@ class mosaicExtension(FactoryExtension):
                     )
 
                 try:
-                    mosaicjson = await asyncio.wait_for(
+                    extracted = await asyncio.wait_for(
                         asyncio.get_running_loop().run_in_executor(
                             None,
                             extract_mosaicjson_from_features,
@@ -279,18 +304,19 @@ class mosaicExtension(FactoryExtension):
                         "Error: timeout reading a COG asset and generating MosaicJSON definition",
                     ) from e
 
-                if mosaicjson is None:
+                if extracted is None:
                     raise HTTPException(
                         HTTP_500_INTERNAL_SERVER_ERROR,
                         "Error: could not extract mosaic data",
                     )
+                mosaicjson, items = extracted
 
                 mosaicjson.name = req.name
                 mosaicjson.description = req.description
                 mosaicjson.attribution = req.attribution
                 mosaicjson.version = req.version if req.version else "0.0.1"
 
-                return mosaicjson
+                return mosaicjson, items
 
             except HTTPException:
                 raise
@@ -340,7 +366,9 @@ class mosaicExtension(FactoryExtension):
                 ],
             )
 
-        async def populate_mosaicjson(request: Request, content_type: str | None):
+        async def populate_mosaicjson(
+            request: Request, content_type: str | None
+        ) -> tuple[MosaicJSON, dict[str, dict] | None]:
             body_json = await request.json()
             content_type = (content_type or "").split(";", 1)[0].strip().lower()
             if content_type in (
@@ -349,10 +377,18 @@ class mosaicExtension(FactoryExtension):
                 "application/vnd.titiler.mosaicjson+json",
             ):
                 mosaicjson = MosaicJSON(**body_json)
+                if mosaicjson.asset_type == STAC_ITEM_KEY_ASSET_TYPE:
+                    raise HTTPException(
+                        HTTP_400_BAD_REQUEST,
+                        f"Error: asset_type '{STAC_ITEM_KEY_ASSET_TYPE}' can only "
+                        "be created from a STAC API query.",
+                    )
+                return mosaicjson, None
             elif content_type == "application/vnd.titiler.urls+json":
                 mosaicjson = await mosaicjson_from_urls(UrisRequestBody(**body_json))
+                return mosaicjson, None
             elif content_type == "application/vnd.titiler.stac-api-query+json":
-                mosaicjson = await mosaicjson_from_stac_api_query(
+                return await mosaicjson_from_stac_api_query(
                     StacApiQueryRequestBody(**body_json)
                 )
             else:
@@ -360,13 +396,18 @@ class mosaicExtension(FactoryExtension):
                     HTTP_415_UNSUPPORTED_MEDIA_TYPE,
                     "Error: media in Content-Type header is not supported.",
                 )
-            return mosaicjson
 
         def mosaic_write(
-            mosaic_uri: str, mosaicjson: MosaicJSON, overwrite: bool
+            mosaic_uri: str,
+            mosaicjson: MosaicJSON,
+            overwrite: bool,
+            items: dict[str, dict] | None,
         ) -> None:
             with factory.backend(mosaic_uri, mosaic_def=mosaicjson) as mosaic:  # type: ignore[call-arg]
                 mosaic.write(overwrite=overwrite)
+                # after write(), whose overwrite deletes every record of the mosaic
+                if items:
+                    write_items(mosaic, items)
 
         def execute_stac_search(mosaic_request: StacApiQueryRequestBody) -> list[dict]:
             try:
@@ -401,7 +442,11 @@ class mosaicExtension(FactoryExtension):
             ) as mosaic:
                 mosaicjson = mosaic.mosaic_def
                 if include_tiles and isinstance(mosaic, DynamoDBBackend):
-                    keys = (mosaic._fetch_dynamodb(qk) for qk in mosaic._quadkeys)
+                    keys = (
+                        mosaic._fetch_dynamodb(qk)
+                        for qk in mosaic._quadkeys
+                        if not qk.startswith(ITEM_QUADKEY_PREFIX)
+                    )
                     mosaicjson.tiles = {x["quadkey"]: x["assets"] for x in keys}
                 return mosaicjson
 
@@ -426,7 +471,7 @@ class mosaicExtension(FactoryExtension):
                 Timer() as t,
                 factory.backend(mosaic_uri) as src_dst,
             ):
-                configure_reader(src_dst, reader_params, layer_params)
+                configure_reader(src_dst, reader_params, layer_params, x, y, z)
                 mosaic_read = t.from_start
                 timings.append(("mosaicread", round(mosaic_read * 1000, 2)))
 
@@ -615,13 +660,15 @@ class mosaicExtension(FactoryExtension):
         ) -> MosaicEntity:
             """Create a MosaicJSON"""
 
-            mosaicjson = await populate_mosaicjson(request, content_type)
+            mosaicjson, items = await populate_mosaicjson(request, content_type)
             mosaic_id = str(uuid.uuid4())
 
             # duplicate IDs are unlikely to exist, but handle it just to be safe
             try:
                 with rasterio.Env(**env):
-                    await store(mosaic_id, mosaicjson, env, overwrite=False)
+                    await store(
+                        mosaic_id, mosaicjson, env, overwrite=False, items=items
+                    )
             except StoreException as e:
                 raise HTTPException(
                     HTTP_409_CONFLICT, "Error: mosaic with given ID already exists"

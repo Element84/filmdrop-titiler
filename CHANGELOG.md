@@ -6,8 +6,10 @@ Notable changes to this project are documented here.
 
 ### Added
 
-- `multi_asset` option for STAC API query mosaics, storing STAC Item URLs so
-  tiles can select any item assets with `assets=` (e.g. `assets=red|bidx=1`).
+- `multi_asset` option for STAC API query mosaics. Slimmed STAC Items are stored
+  with the mosaic (DynamoDB records or a file sidecar), so tiles can select any
+  item assets with `assets=` (e.g. `assets=red|bidx=1`) without calling the
+  STAC API.
 
 ### Changed
 

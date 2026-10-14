@@ -63,6 +63,8 @@ The following endpoints are available:
 
 - `/cog` - Cloud Optimized GeoTIFF tiler endpoints
 - `/stac` - STAC item tiler endpoints
+- `/mosaicjson` - Stored mosaics built from COGs or STAC API queries; see
+  [docs/mosaic.md](docs/mosaic.md)
 - `/algorithms` - Image processing algorithms
 - `/tms` - TileMatrixSet endpoints
 - `/healthz` - Health check endpoint

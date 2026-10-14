@@ -28,7 +28,7 @@ class StacApiQueryRequestBody(ExtendedSearch):
 
     stac_api_root: str
     asset_name: str | None = None
-    # Store STAC Item URLs so tiles can combine assets; asset_name becomes the default
+    # Store slimmed STAC Items so tiles can combine assets; asset_name becomes the default
     multi_asset: bool = False
     name: str | None = None
     description: str | None = None

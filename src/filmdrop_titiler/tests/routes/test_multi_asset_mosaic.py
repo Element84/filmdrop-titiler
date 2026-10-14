@@ -1,5 +1,7 @@
+import gzip
 import io
 import json
+from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 import morecantile
@@ -33,7 +35,7 @@ def write_cog(path, value: int, count: int = 1) -> None:
 
 @pytest.fixture
 def stac_item(tmp_path) -> dict:
-    assets = {}
+    assets: dict[str, dict[str, Any]] = {}
     for name, value, count in (
         ("visual", 200, 3),
         ("red", 10, 1),
@@ -45,7 +47,11 @@ def stac_item(tmp_path) -> dict:
         assets[name] = {
             "href": href,
             "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+            "title": name,
         }
+    assets["red"].update({"raster:scale": 0.0001, "raster:offset": -0.1, "nodata": 0})
+    assets["green"]["raster:bands"] = [{"scale": 0.5, "offset": 1.0, "nodata": 0}]
+    assets["thumbnail"] = {"href": str(tmp_path / "thumb.jpg"), "type": "image/jpeg"}
 
     item_path = tmp_path / "item.json"
     minx, miny, maxx, maxy = BOUNDS
@@ -53,6 +59,7 @@ def stac_item(tmp_path) -> dict:
         "type": "Feature",
         "stac_version": "1.1.0",
         "id": "item",
+        "collection": "test",
         "bbox": list(BOUNDS),
         "geometry": {
             "type": "Polygon",
@@ -60,7 +67,7 @@ def stac_item(tmp_path) -> dict:
                 [[minx, miny], [maxx, miny], [maxx, maxy], [minx, maxy], [minx, miny]]
             ],
         },
-        "properties": {"datetime": "2026-01-01T00:00:00Z"},
+        "properties": {"datetime": "2026-01-01T00:00:00Z", "eo:cloud_cover": 5},
         "links": [{"rel": "self", "href": str(item_path)}],
         "assets": assets,
     }
@@ -117,14 +124,94 @@ def read_npy(content: bytes) -> np.ndarray:
     return np.load(io.BytesIO(content))
 
 
-def test_multi_asset_mosaic_stores_item_urls(app, stac_search, stac_item):
+def test_multi_asset_mosaic_stores_slim_items(app, stac_search, tmp_path):
     mosaic_id = create_mosaic(app, multi_asset=True)
 
     mosaicjson = app.get(f"/mosaicjson/mosaics/{mosaic_id}/mosaicjson").json()
-    assert mosaicjson["asset_type"] == "application/geo+json"
+    assert mosaicjson["asset_type"] == "application/vnd.filmdrop.stac-item-key"
     assert mosaicjson["layers"] == {"default_assets": ["visual"]}
+    assert {key for keys in mosaicjson["tiles"].values() for key in keys} == {
+        "test/item"
+    }
+
+    with gzip.open(tmp_path / f"{mosaic_id}.items.json.gz", "rt") as f:
+        items = json.load(f)
+    item = items["test/item"]
+    assert item["properties"] == {"datetime": "2026-01-01T00:00:00Z"}
+    assert item["links"] == []
+    assert set(item["assets"]) == {"visual", "red", "green", "blue"}
+    assert set(item["assets"]["red"]) == {
+        "href",
+        "type",
+        "raster:scale",
+        "raster:offset",
+        "nodata",
+    }
+
+
+def test_multi_asset_mosaic_tiles_do_not_fetch_items(app, stac_search, tmp_path):
+    mosaic_id = create_mosaic(app, multi_asset=True)
+    tile = center_tile(app, mosaic_id)
+    (tmp_path / "item.json").unlink()
+
+    response = app.get(tile_url(mosaic_id, tile), params={"assets": "red"})
+    assert response.status_code == 200, response.text
+    assert read_npy(response.content)[0].max() == 10
+
+
+def test_unscale_applies_stac_scale_and_offset(app, stac_search):
+    mosaic_id = create_mosaic(app, multi_asset=True)
+    url = tile_url(mosaic_id, center_tile(app, mosaic_id))
+
+    def first_band(params: dict) -> np.ndarray:
+        response = app.get(url, params=params)
+        assert response.status_code == 200, response.text
+        data = read_npy(response.content)
+        # last npy band is the mask; compare valid pixels only
+        return data[0][data[-1] > 0]
+
+    # STAC 1.1 asset-level raster:scale/raster:offset: 10 * 0.0001 - 0.1
+    assert np.allclose(first_band({"assets": "red", "unscale": True}), -0.099)
+    # STAC 1.0 raster:bands scale/offset: 20 * 0.5 + 1
+    assert np.allclose(first_band({"assets": "green", "unscale": True}), 11)
+    # no STAC scale/offset
+    assert np.allclose(first_band({"assets": "blue", "unscale": True}), 30)
+    assert first_band({"assets": "red"}).max() == 10
+    assert np.allclose(
+        first_band({"assets": "red|expression=b1*2", "unscale": True}), -0.198
+    )
+
+
+def test_item_key_mosaicjson_cannot_be_posted(app, stac_search):
+    response = app.post(
+        "/mosaicjson/mosaics",
+        json={
+            "mosaicjson": "0.0.3",
+            "minzoom": 7,
+            "maxzoom": 12,
+            "bounds": list(BOUNDS),
+            "asset_type": "application/vnd.filmdrop.stac-item-key",
+            "tiles": {"0230": ["test/item"]},
+        },
+    )
+    assert response.status_code == 400
+
+
+def test_item_url_mosaicjson_still_reads_items(app, stac_search, stac_item):
     item_url = stac_item["links"][0]["href"]
-    assert {url for urls in mosaicjson["tiles"].values() for url in urls} == {item_url}
+    mosaic_id = create_mosaic(app, multi_asset=True)
+    mosaicjson = app.get(f"/mosaicjson/mosaics/{mosaic_id}/mosaicjson").json()
+    mosaicjson["asset_type"] = "application/geo+json"
+    mosaicjson["tiles"] = {qk: [item_url] for qk in mosaicjson["tiles"]}
+
+    response = app.post("/mosaicjson/mosaics", json=mosaicjson)
+    assert response.status_code == 201, response.text
+    url_mosaic_id = response.json()["id"]
+
+    tile = center_tile(app, url_mosaic_id)
+    response = app.get(tile_url(url_mosaic_id, tile), params={"assets": "green"})
+    assert response.status_code == 200, response.text
+    assert read_npy(response.content)[0].max() == 20
 
 
 def test_multi_asset_mosaic_tile_selects_assets(app, stac_search):
