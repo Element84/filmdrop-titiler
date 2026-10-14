@@ -680,6 +680,7 @@ class mosaicExtension(FactoryExtension):
             q.pop("maxzoom", None)
             q.pop("SERVICE", None)
             q.pop("REQUEST", None)
+            q.pop("tilesize", None)
             qs = urlencode(list(q.items()))
             tiles_url += f"?{qs}"
 
