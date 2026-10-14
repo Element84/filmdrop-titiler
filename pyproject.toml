@@ -25,15 +25,15 @@ classifiers = [
 ]
 dynamic = ["version"]
 dependencies = [
-    "titiler.core[telemetry]==1.1.0",
-    "titiler.extensions[cogeo,stac]==1.1.0",
-    "titiler.mosaic[mosaicjson]==1.1.0",
+    "titiler.core[telemetry]==2.4.0",
+    "titiler.extensions[cogeo,stac]==2.4.0",
+    "titiler.mosaic[mosaicjson]==2.4.0",
     "mangum>=0.17.0",
     "pydantic>=2.0",
     "pydantic-settings>=2.0",
     "pystac-client~=0.9.0",
     "stac-pydantic~=3.6.0",
-    "starlette-cramjam>=0.3,<0.4",
+    "starlette-cramjam>=0.4,<0.6",
 ]
 
 [project.optional-dependencies]
@@ -75,7 +75,7 @@ package-dir = {"" = "src"}
 [tool.pytest.ini_options]
 minversion = "6.0"
 addopts = "-v --cov=filmdrop_titiler --cov-report=term-missing"
-testpaths = ["tests"]
+testpaths = ["src/filmdrop_titiler/tests"]
 
 [[tool.mypy.overrides]]
 module=["starlette_cramjam", "starlette_cramjam.middleware", "rasterio"]
