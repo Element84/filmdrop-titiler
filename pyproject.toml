@@ -75,7 +75,7 @@ package-dir = {"" = "src"}
 [tool.pytest.ini_options]
 minversion = "6.0"
 addopts = "-v --cov=filmdrop_titiler --cov-report=term-missing"
-testpaths = ["tests"]
+testpaths = ["src/filmdrop_titiler/tests"]
 
 [[tool.mypy.overrides]]
 module=["starlette_cramjam", "starlette_cramjam.middleware", "rasterio"]
