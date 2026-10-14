@@ -10,12 +10,14 @@ from urllib.parse import urlencode
 import morecantile
 import rasterio
 from cogeo_mosaic.backends import DynamoDBBackend
+from cogeo_mosaic.backends.stac import default_stac_accessor
 from cogeo_mosaic.errors import MosaicError
 from cogeo_mosaic.mosaic import MosaicJSON
 from fastapi import Depends, Header, HTTPException, Path, Query
+from pydantic import AfterValidator
 from pystac_client import Client
 from rio_tiler.constants import MAX_THREADS
-from rio_tiler.io import Reader
+from rio_tiler.io import Reader, STACReader
 from rio_tiler.types import ColorMapType
 from rio_tiler.utils import Timer
 from starlette.requests import Request
@@ -30,10 +32,11 @@ from starlette.status import (
     HTTP_500_INTERNAL_SERVER_ERROR,
 )
 from titiler.core.dependencies import (
-    BidxParams,
+    BidxExprParams,
     DatasetParams,
     DefaultDependency,
     ImageRenderingParams,
+    _parse_asset,
 )
 from titiler.core.factory import FactoryExtension, img_endpoint_params
 from titiler.core.models.mapbox import TileJSON
@@ -55,6 +58,58 @@ from filmdrop_titiler.application.models.mosaic import (
 from .settings import ApiSettings
 
 logger = logging.getLogger(__name__)
+
+# MosaicJSON `asset_type` marking tile entries as STAC Item URLs rather than COG hrefs
+STAC_ITEM_ASSET_TYPE = "application/geo+json"
+ASSET_LAYER_PARAMS = {"assets", "asset_as_band"}
+
+
+@dataclass
+class MosaicLayerParams(BidxExprParams):
+    """Band indexes/expression for COG mosaics, plus optional assets for STAC Item mosaics."""
+
+    assets: Annotated[
+        list[str] | None,
+        AfterValidator(lambda v: _parse_asset(v) if v else v),
+        Query(
+            title="Asset names",
+            description="STAC asset names, optionally with options (e.g. `red|bidx=1`). "
+            "Only valid for multi-asset mosaics; defaults to the mosaic's asset.",
+        ),
+    ] = None
+    asset_as_band: Annotated[
+        bool | None,
+        Query(
+            title="Consider asset as a 1 band dataset",
+            description="Asset as Band. Only valid for multi-asset mosaics.",
+        ),
+    ] = None
+
+
+def configure_reader(src_dst: Any, reader_params: dict, layer_params: dict) -> None:
+    """Point the backend at the reader matching how the mosaic was stored."""
+    mosaic_def = src_dst.mosaic_def
+    if mosaic_def.asset_type == STAC_ITEM_ASSET_TYPE:
+        if "indexes" in layer_params:
+            raise HTTPException(
+                HTTP_400_BAD_REQUEST,
+                "Error: bidx is not supported for multi-asset mosaics, "
+                "use assets={name}|bidx={indexes}.",
+            )
+        src_dst.reader = STACReader
+        src_dst.reader_options = {
+            "default_assets": (mosaic_def.layers or {}).get("default_assets"),
+            **reader_params,
+        }
+        return
+
+    if used := ASSET_LAYER_PARAMS & layer_params.keys():
+        raise HTTPException(
+            HTTP_400_BAD_REQUEST,
+            f"Error: {sorted(used)} require a multi-asset mosaic.",
+        )
+    src_dst.reader = Reader
+    src_dst.reader_options = reader_params
 
 
 @dataclass
@@ -130,13 +185,22 @@ class mosaicExtension(FactoryExtension):
                 raise ValueError(f"Asset with name '{asset_name}' could not be found.")
 
         def extract_mosaicjson_from_features(
-            features: list[dict], asset_name: str
+            features: list[dict], asset_name: str, multi_asset: bool
         ) -> MosaicJSON | None:
             if features:
                 try:
                     with Reader(asset_href(features[0], asset_name)) as cog:
                         minzoom = cog.minzoom
                         maxzoom = cog.maxzoom
+                    if multi_asset:
+                        return MosaicJSON.from_features(
+                            features,
+                            minzoom=minzoom,
+                            maxzoom=maxzoom,
+                            accessor=default_stac_accessor,
+                            asset_type=STAC_ITEM_ASSET_TYPE,
+                            layers={"default_assets": [asset_name]},
+                        )
                     return MosaicJSON.from_features(
                         features,
                         minzoom=minzoom,
@@ -205,6 +269,7 @@ class mosaicExtension(FactoryExtension):
                             extract_mosaicjson_from_features,
                             features,
                             req.asset_name if req.asset_name else "visual",
+                            req.multi_asset,
                         ),
                         60,  # todo: how much time should/can it take?
                     )
@@ -359,12 +424,9 @@ class mosaicExtension(FactoryExtension):
             threads = int(os.getenv("MOSAIC_CONCURRENCY", MAX_THREADS))
             with (
                 Timer() as t,
-                factory.backend(
-                    mosaic_uri,
-                    reader=factory.dataset_reader,
-                    reader_options={**reader_params},
-                ) as src_dst,
+                factory.backend(mosaic_uri) as src_dst,
             ):
+                configure_reader(src_dst, reader_params, layer_params)
                 mosaic_read = t.from_start
                 timings.append(("mosaicread", round(mosaic_read * 1000, 2)))
 
@@ -479,7 +541,7 @@ class mosaicExtension(FactoryExtension):
             tilesize: int = Query(512, gt=0, description="Tile size in pixels."),
             minzoom: int | None = Query(None, description="Overwrite default minzoom."),
             maxzoom: int | None = Query(None, description="Overwrite default maxzoom."),
-            layer_params: BidxParams = Depends(factory.layer_dependency),
+            layer_params: MosaicLayerParams = Depends(factory.layer_dependency),
             dataset_params: DatasetParams = Depends(factory.dataset_dependency),
             render_params: ImageRenderingParams = Depends(factory.render_dependency),
             colormap: ColorMapType = Depends(factory.colormap_dependency),
@@ -498,11 +560,15 @@ class mosaicExtension(FactoryExtension):
                 kwargs["format"] = tile_format.value
             tiles_url = factory.url_for(request, "tile", **kwargs)
 
-            q = dict(request.query_params)
-            q.pop("TileMatrixSetId", None)
-            q.pop("tile_format", None)
-            q.setdefault("tilesize", str(tilesize))
-            qs = urlencode(list(q.items()))
+            excluded = {"TileMatrixSetId", "tile_format"}
+            q = [
+                (k, v)
+                for k, v in request.query_params.multi_items()
+                if k not in excluded
+            ]
+            if "tilesize" not in request.query_params:
+                q.append(("tilesize", str(tilesize)))
+            qs = urlencode(q)
             tiles_url += f"?{qs}"
 
             with rasterio.Env(**env):
@@ -589,7 +655,7 @@ class mosaicExtension(FactoryExtension):
                 ImageType | None,
                 "Output image type. Default is auto.",
             ] = None,
-            layer_params: BidxParams = Depends(factory.layer_dependency),
+            layer_params: MosaicLayerParams = Depends(factory.layer_dependency),
             dataset_params: DatasetParams = Depends(factory.dataset_dependency),
             render_params: ImageRenderingParams = Depends(factory.render_dependency),
             colormap: ColorMapType = Depends(factory.colormap_dependency),
@@ -652,7 +718,7 @@ class mosaicExtension(FactoryExtension):
             ),
             minzoom: int | None = Query(None, description="Overwrite default minzoom."),
             maxzoom: int | None = Query(None, description="Overwrite default maxzoom."),
-            layer_params: BidxParams = Depends(factory.layer_dependency),
+            layer_params: MosaicLayerParams = Depends(factory.layer_dependency),
             dataset_params: DatasetParams = Depends(factory.dataset_dependency),
             render_params: ImageRenderingParams = Depends(factory.render_dependency),
             colormap: ColorMapType = Depends(factory.colormap_dependency),
@@ -674,13 +740,20 @@ class mosaicExtension(FactoryExtension):
                 format=tile_format.value,
             )
 
-            q = dict(request.query_params)
-            q.pop("tile_format", None)
-            q.pop("minzoom", None)
-            q.pop("maxzoom", None)
-            q.pop("SERVICE", None)
-            q.pop("REQUEST", None)
-            qs = urlencode(list(q.items()))
+            excluded = {
+                "tile_format",
+                "minzoom",
+                "maxzoom",
+                "SERVICE",
+                "REQUEST",
+            }
+            qs = urlencode(
+                [
+                    (k, v)
+                    for k, v in request.query_params.multi_items()
+                    if k not in excluded
+                ]
+            )
             tiles_url += f"?{qs}"
 
             mosaic_uri = mk_src_path(mosaic_id)

@@ -37,7 +37,7 @@ from titiler.mosaic.extensions.wmts import wmtsExtension as mosaic_wmtsExtension
 from titiler.mosaic.factory import MosaicTilerFactory
 
 from filmdrop_titiler.application import __version__ as titiler_version
-from filmdrop_titiler.application.extensions import mosaicExtension
+from filmdrop_titiler.application.extensions import MosaicLayerParams, mosaicExtension
 from filmdrop_titiler.application.settings import ApiSettings
 from filmdrop_titiler.application.templates.template import titiler_templates
 
@@ -112,6 +112,7 @@ if not api_settings.disable_stac:
 if not api_settings.disable_mosaic:
     mosaic = MosaicTilerFactory(
         backend=MosaicJSONBackend,  # type: ignore
+        layer_dependency=MosaicLayerParams,
         router_prefix="/mosaicjson",
         extensions=[
             MosaicJSONExtension(),

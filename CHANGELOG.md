@@ -4,6 +4,11 @@ Notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- `multi_asset` option for STAC API query mosaics, storing STAC Item URLs so
+  tiles can select any item assets with `assets=` (e.g. `assets=red|bidx=1`).
+
 ### Changed
 
 - Upgraded TiTiler dependencies to 2.4.0.
