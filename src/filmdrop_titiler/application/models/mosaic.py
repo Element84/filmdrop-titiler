@@ -3,7 +3,7 @@
 import re
 from typing import Any
 
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, field_validator
 from stac_pydantic.api.search import ExtendedSearch
 from stac_pydantic.links import Link
 
@@ -40,8 +40,9 @@ class StacApiQueryRequestBody(ExtendedSearch):
 
     filter: dict[str, Any] | None = None
 
-    @validator("datetime")
-    def validate_datetime(cls, v):
+    @field_validator("datetime")
+    @classmethod
+    def validate_datetime(cls, v: str | None) -> str | None:
         """
         datetime validation
         overrides default validation due to issue https://github.com/stac-utils/stac-pydantic/issues/78

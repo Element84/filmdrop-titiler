@@ -13,7 +13,6 @@ from cogeo_mosaic.backends import DynamoDBBackend
 from cogeo_mosaic.errors import MosaicError
 from cogeo_mosaic.mosaic import MosaicJSON
 from fastapi import Depends, Header, HTTPException, Path, Query
-from pydantic import Field
 from pystac_client import Client
 from rio_tiler.constants import MAX_THREADS
 from rio_tiler.io import Reader
@@ -346,7 +345,7 @@ class mosaicExtension(FactoryExtension):
             z: int,
             x: int,
             y: int,
-            scale: int,
+            tilesize: int,
             format: ImageType | None,
             layer_params: dict,
             dataset_params: dict,
@@ -356,8 +355,6 @@ class mosaicExtension(FactoryExtension):
         ) -> tuple[bytes, Any, ImageType, list[tuple[str, float]]]:
             """Create map tile from a COG."""
             timings = []
-
-            tilesize = scale * 256
 
             threads = int(os.getenv("MOSAIC_CONCURRENCY", MAX_THREADS))
             with (
@@ -479,9 +476,7 @@ class mosaicExtension(FactoryExtension):
             tile_format: ImageType | None = Query(
                 None, description="Output image type. Default is auto."
             ),
-            tile_scale: int = Query(
-                1, gt=0, lt=4, description="Tile size scale. 1=256x256, 2=512x512..."
-            ),
+            tilesize: int = Query(512, gt=0, description="Tile size in pixels."),
             minzoom: int | None = Query(None, description="Overwrite default minzoom."),
             maxzoom: int | None = Query(None, description="Overwrite default maxzoom."),
             layer_params: BidxParams = Depends(factory.layer_dependency),
@@ -498,7 +493,6 @@ class mosaicExtension(FactoryExtension):
                 "z": "{z}",
                 "x": "{x}",
                 "y": "{y}",
-                "scale": tile_scale,
             }
             if tile_format:
                 kwargs["format"] = tile_format.value
@@ -507,7 +501,7 @@ class mosaicExtension(FactoryExtension):
             q = dict(request.query_params)
             q.pop("TileMatrixSetId", None)
             q.pop("tile_format", None)
-            q.pop("tile_scale", None)
+            q.setdefault("tilesize", str(tilesize))
             qs = urlencode(list(q.items()))
             tiles_url += f"?{qs}"
 
@@ -585,21 +579,12 @@ class mosaicExtension(FactoryExtension):
         @factory.router.get(
             r"/mosaics/{mosaic_id}/tiles/{z}/{x}/{y}.{format}", **img_endpoint_params
         )
-        @factory.router.get(
-            r"/mosaics/{mosaic_id}/tiles/{z}/{x}/{y}@{scale}x", **img_endpoint_params
-        )
-        @factory.router.get(
-            r"/mosaics/{mosaic_id}/tiles/{z}/{x}/{y}@{scale}x.{format}",
-            **img_endpoint_params,
-        )
         async def tile(
             mosaic_id: str,
             z: int = Path(..., ge=0, le=30, description="Mercator tiles's zoom level"),
             x: int = Path(..., description="Mercator tiles's column"),
             y: int = Path(..., description="Mercator tiles's row"),
-            scale: Annotated[
-                int, Field(gt=0, lt=4), "Tile size scale. 1=256x256, 2=512x512..."
-            ] = 1,
+            tilesize: int = Query(256, gt=0, description="Tile size in pixels."),
             format: Annotated[
                 ImageType | None,
                 "Output image type. Default is auto.",
@@ -628,7 +613,7 @@ class mosaicExtension(FactoryExtension):
                             z,
                             x,
                             y,
-                            scale,
+                            tilesize,
                             format,
                             layer_params.as_dict(),
                             dataset_params.as_dict(),
@@ -665,9 +650,6 @@ class mosaicExtension(FactoryExtension):
             tile_format: ImageType = Query(
                 ImageType.png, description="Output image type. Default is png."
             ),
-            tile_scale: int = Query(
-                1, gt=0, lt=4, description="Tile size scale. 1=256x256, 2=512x512..."
-            ),
             minzoom: int | None = Query(None, description="Overwrite default minzoom."),
             maxzoom: int | None = Query(None, description="Overwrite default maxzoom."),
             layer_params: BidxParams = Depends(factory.layer_dependency),
@@ -689,17 +671,16 @@ class mosaicExtension(FactoryExtension):
                 z="{TileMatrix}",
                 x="{TileCol}",
                 y="{TileRow}",
-                scale=tile_scale,
                 format=tile_format.value,
             )
 
             q = dict(request.query_params)
             q.pop("tile_format", None)
-            q.pop("tile_scale", None)
             q.pop("minzoom", None)
             q.pop("maxzoom", None)
             q.pop("SERVICE", None)
             q.pop("REQUEST", None)
+            q.pop("tilesize", None)
             qs = urlencode(list(q.items()))
             tiles_url += f"?{qs}"
 
@@ -718,10 +699,10 @@ class mosaicExtension(FactoryExtension):
                 tm = f"""
                         <TileMatrix>
                             <ows:Identifier>{matrix.id}</ows:Identifier>
-                            <ScaleDenominator>{matrix.scaleDenominator / tile_scale}</ScaleDenominator>
+                            <ScaleDenominator>{matrix.scaleDenominator}</ScaleDenominator>
                             <TopLeftCorner>{matrix.pointOfOrigin[0]} {matrix.pointOfOrigin[1]}</TopLeftCorner>
-                            <TileWidth>{matrix.tileWidth * tile_scale}</TileWidth>
-                            <TileHeight>{matrix.tileHeight * tile_scale}</TileHeight>
+                            <TileWidth>{matrix.tileWidth}</TileWidth>
+                            <TileHeight>{matrix.tileHeight}</TileHeight>
                             <MatrixWidth>{matrix.matrixWidth}</MatrixWidth>
                             <MatrixHeight>{matrix.matrixHeight}</MatrixHeight>
                         </TileMatrix>"""
